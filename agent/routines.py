@@ -42,7 +42,7 @@ SYMPTOM_LABELS = {
     "legs_glutes": "Legs & glutes",
     "wrists_hands": "Wrists & hands",
     "tired_eyes": "Tired eyes",
-    "general": "General reset",
+    "general": "General",  # the UI appends " reset" — "General reset reset" otherwise
 }
 
 # A closer that costs little and reliably lands well.

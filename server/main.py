@@ -212,9 +212,17 @@ async def _emit_coach(message: dict[str, Any]) -> None:
 async def _startup() -> None:
     memory.init()
     pose_backend.start()  # logs into pose_backend.error if the model isn't there
-    agent.on_trace = lambda entry: asyncio.get_event_loop().call_soon_threadsafe(
-        lambda: asyncio.ensure_future(broadcast.send({"type": "trace", "entry": entry}))
-    )
+    # The agent runs in worker threads (asyncio.to_thread), and a worker thread
+    # has no event loop of its own — get_event_loop() raises there. Capture the
+    # running loop once, here, and hand traces back to it from any thread.
+    loop = asyncio.get_running_loop()
+
+    def _on_trace(entry: dict[str, Any]) -> None:
+        loop.call_soon_threadsafe(
+            lambda: asyncio.ensure_future(broadcast.send({"type": "trace", "entry": entry}))
+        )
+
+    agent.on_trace = _on_trace
     app.state.tasks = [
         asyncio.create_task(state_loop()),
         asyncio.create_task(agent_loop()),
