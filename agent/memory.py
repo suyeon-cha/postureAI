@@ -25,9 +25,9 @@ from typing import Any
 
 DB_PATH = Path(os.environ.get("FLOWRESET_DB", Path(__file__).parent.parent / "flowreset.db"))
 
-# No workspace cohort smaller than this is ever reported. With 5 people, a
-# manager cannot infer an individual's comfort response from the aggregate.
-K_ANONYMITY = 5
+# No workspace cohort smaller than this is ever reported. Ten is the product's
+# conservative MVP floor for reducing re-identification risk.
+K_ANONYMITY = 10
 
 _lock = threading.Lock()
 

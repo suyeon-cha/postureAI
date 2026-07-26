@@ -185,7 +185,9 @@ export class MockBackend {
       estimated_seconds: spent,
       moves,
       move_names: moves.map((k) => MOVES[k].name),
-      camera_useful: symptom !== "tired_eyes",
+      // Every category offers camera participation. For eye resets, the camera
+      // confirms looking away/completion rather than diagnosing vision or gaze.
+      camera_useful: true,
       needs_full_body: moves.some((k) => STANDING_ONLY.includes(k)),
       avoided: [],
     };

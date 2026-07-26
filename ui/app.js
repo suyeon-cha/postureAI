@@ -49,9 +49,9 @@ const FORCE_PREVIEW =
 
 const NAV = [
   { key: "welcome", label: "Overview" },
-  { key: "home", label: "Take a reset" },
-  { key: "dashboard", label: "Progress" },
-  { key: "workspace", label: "Workspace" },
+  { key: "home", label: "New reset" },
+  { key: "dashboard", label: "My progress" },
+  { key: "workspace", label: "Team insights" },
   { key: "settings", label: "Settings" },
 ];
 
@@ -380,15 +380,15 @@ function viewWelcome() {
     <section class="hero">
       <div class="stack">
         <span class="eyebrow">Private wellbeing agent · runs on your machine</span>
-        <h1>Your next productive break is 75&nbsp;seconds away.</h1>
-        <p class="lede">Tell FlowReset what feels uncomfortable, how long you have, and whether
-          you can stand. It picks the smallest reset that fits, guides you through it with the
-          camera if you want, and remembers what actually helped.</p>
+        <h1>Feel better at your desk in under two minutes.</h1>
+        <p class="lede">Choose what feels uncomfortable. FlowReset builds a short reset,
+          coaches your movement with optional camera feedback, and learns what helps—all
+          privately on the Dell Pro Max with GB10.</p>
         <div class="row">
-          <button class="btn" id="start">Set up FlowReset</button>
-          <button class="btn secondary" id="skipOnboard">Skip to a reset</button>
+          <button class="btn" id="start">Start my first reset</button>
+          <button class="btn subtle" id="skipOnboard">Try without setup</button>
         </div>
-        <p class="tiny muted">No account. No cloud. Camera off by default.</p>
+        <p class="tiny muted">About 30 seconds to set up · No account · Camera off by default</p>
       </div>
 
       <div class="hero-art" aria-hidden="true">
@@ -431,22 +431,18 @@ function viewWelcome() {
 
     <section class="section stack">
       <div class="stack-sm measure">
-        <h2>How it works</h2>
-        <p class="muted">Four steps, under two minutes, entirely on this machine.</p>
+        <h2>From discomfort to a useful break</h2>
+        <p class="muted">Three clear steps, with no routine hunting.</p>
       </div>
-      <div class="grid cols-4 steps-flow">
-        <div class="step"><strong>You say what hurts</strong>
-          <p class="small muted">In your own words, or one tap on a body area. Add how long you
-            have and whether standing is an option.</p></div>
-        <div class="step"><strong>The agent reasons</strong>
-          <p class="small muted">It reads your preferences and private history, then composes a
-            routine from an approved library — it can't invent an exercise.</p></div>
-        <div class="step"><strong>It guides the movement</strong>
+      <div class="grid cols-3 steps-flow">
+        <div class="step"><strong>Check in</strong>
+          <p class="small muted">Pick an area, your available time, and whether you can stand.</p></div>
+        <div class="step"><strong>Follow your reset</strong>
           <p class="small muted">Countdown, one instruction at a time, and — only if you turn the
             camera on — rep counting and a single form cue.</p></div>
-        <div class="step"><strong>You say if it helped</strong>
-          <p class="small muted">Better, same, or worse. That one tap is what makes tomorrow's
-            recommendation better than today's.</p></div>
+        <div class="step"><strong>Teach the agent</strong>
+          <p class="small muted">Tell it whether you feel better, the same, or worse so the next
+            recommendation improves.</p></div>
       </div>
     </section>
 
@@ -482,10 +478,10 @@ function viewWelcome() {
             <span class="eyebrow">For workplaces</span>
             <h3>Wellbeing your team will actually opt into</h3>
             <p class="small muted">People Ops sees aggregate engagement for people who chose to
-              share it — never an individual, never video, never a symptom. Any cohort under five
+              share it — never an individual, never video, never a symptom. Any cohort under ten
               people is suppressed in the query itself, not hidden in the interface.</p>
             <div class="grid cols-2">
-              <div class="stat"><div class="num">5+</div><div class="lbl">k-anonymity floor</div></div>
+              <div class="stat"><div class="num">10+</div><div class="lbl">minimum reporting cohort</div></div>
               <div class="stat"><div class="num">0</div><div class="lbl">individual records exposed</div></div>
             </div>
             <button class="btn secondary" id="toWorkspace">See the workspace view</button>
@@ -501,8 +497,8 @@ function viewWelcome() {
           <p class="muted">Takes about thirty seconds to set up.</p>
         </div>
         <div class="row">
-          <button class="btn" id="start2">Set up FlowReset</button>
-          <button class="btn subtle" id="skip2">Skip to a reset</button>
+          <button class="btn" id="start2">Start my first reset</button>
+          <button class="btn subtle" id="skip2">Try without setup</button>
         </div>
       </div>
     </section>
@@ -647,43 +643,81 @@ function savePrefs() {
 function viewHome() {
   const first = S.dashboard?.summary?.top_symptom;
   const wrap = el(`<div class="stack">
-    <div class="stack-sm">
-      <h1>What's bothering you?</h1>
-      <p class="muted">Say it in your own words, or pick an area.</p>
+    <div class="flow-heading">
+      <div class="stack-sm">
+        <span class="eyebrow">New reset · about ${S.intake.duration_min} minutes</span>
+        <h1>What needs a reset right now?</h1>
+        <p class="muted">Choose an area, then adjust the plan constraints if needed.</p>
+      </div>
+      <div class="privacy-chip"><span>●</span> AI and camera processing stay local</div>
     </div>
 
-    <div class="card stack">
-      <textarea id="req" rows="2" placeholder="My shoulders feel tight. I have 90 seconds and need to stay seated."></textarea>
-      <div class="grid symptom-grid" id="cards"></div>
-      <div class="stack-sm">
-        <span class="eyebrow">How long do you have?</span>
-        <div class="row" id="dur"></div>
+    <div class="reset-builder">
+      <div class="card stack">
+        <div class="flow-step">
+          <span class="step-number">1</span>
+          <div><h2>Choose an area</h2><p class="small muted">Select one. Nothing starts until you confirm.</p></div>
+        </div>
+        <div class="grid symptom-grid" id="cards"></div>
+        <div class="or"><span>or describe it</span></div>
+        <textarea id="req" rows="2" aria-label="Describe what you need"
+          placeholder="Example: My shoulders feel tight and I need to stay seated."></textarea>
+        <div class="row">
+          <button class="btn secondary" id="mic" type="button" aria-pressed="false">🎤 Use voice</button>
+          <span class="small muted">Optional</span>
+        </div>
+        <p class="tiny muted" id="micStatus"></p>
       </div>
-      <div class="stack-sm">
-        <span class="eyebrow">Can you stand?</span>
-        <div class="row" id="stand"></div>
-      </div>
-      <div class="row">
-        <button class="btn" id="ask">Ask the agent</button>
-        <button class="btn secondary" id="mic" type="button" aria-pressed="false">🎤 Speak instead</button>
-        <span class="small muted" id="hint">The agent reads your history and picks from the approved library.</span>
-      </div>
-      <p class="tiny muted" id="micStatus"></p>
+
+      <aside class="card reset-options stack">
+        <div class="flow-step">
+          <span class="step-number">2</span>
+          <div><h2>Set your constraints</h2><p class="small muted">We prefilled your preferences.</p></div>
+        </div>
+        <div class="stack-sm">
+          <span class="eyebrow">Available time</span>
+          <div class="row" id="dur"></div>
+        </div>
+        <div class="stack-sm">
+          <span class="eyebrow">Movement option</span>
+          <div class="row" id="stand"></div>
+        </div>
+        <div class="selection-summary" id="selectionSummary" aria-live="polite"></div>
+        <button class="btn wide" id="ask">Build my reset</button>
+        <p class="tiny muted" id="hint">The local agent uses your preferences and approved exercises.</p>
+      </aside>
     </div>
 
-    ${first ? `<div class="notice small">Heads up — <strong>${esc(S.dashboard.symptom_labels?.[first] || first)}</strong>
-      has come up most this week. FlowReset will offer that first if you don't say otherwise.</div>` : ""}
+    <div class="trust-row">
+      <span>✓ Camera is optional</span>
+      <span>✓ Frames are never stored</span>
+      <span>✓ General wellness—not medical care</span>
+    </div>
+
+    ${first ? `<div class="notice small">Your recent pattern: <strong>${esc(S.dashboard.symptom_labels?.[first] || first)}</strong>
+      came up most this week. It is suggested first, but you stay in control.</div>` : ""}
   </div>`);
 
+  const updateSummary = () => {
+    const selected = SYMPTOM_CARDS.find((s) => s.key === S.intake.symptom);
+    const summary = $("#selectionSummary", wrap);
+    if (!summary) return;
+    summary.innerHTML = `<span class="eyebrow">Your request</span>
+      <strong>${esc(selected?.label || "General desk reset")}</strong>
+      <span class="small muted">${S.intake.duration_min} min · ${S.intake.can_stand ? "Seated or standing" : "Seated only"}</span>`;
+  };
+
   SYMPTOM_CARDS.forEach((s) => {
-    const b = el(`<button class="symptom" type="button">
+    const b = el(`<button class="symptom" type="button" aria-pressed="${S.intake.symptom === s.key}">
       <span class="glyph">${s.glyph}</span><strong>${esc(s.label)}</strong>
-      <span class="small muted">${esc(s.hint)}</span></button>`);
+      <span class="small muted">${esc(s.hint)}</span>
+      <span class="selected-check" aria-hidden="true">✓</span></button>`);
     b.addEventListener("click", () => {
-      // Tapping a card *is* an explicit choice of area.
       S.intake.symptom = s.key;
       S.intake.touched.symptom = true;
-      requestPlan(`My ${s.label.toLowerCase()} need a reset. I have ${S.intake.duration_min} minutes and ${S.intake.can_stand ? "can stand" : "need to stay seated"}.`);
+      [...$("#cards", wrap).children].forEach((c) => c.setAttribute("aria-pressed", "false"));
+      b.setAttribute("aria-pressed", "true");
+      updateSummary();
     });
     $("#cards", wrap).append(b);
   });
@@ -695,30 +729,37 @@ function viewHome() {
       S.intake.touched.duration = true;
       [...$("#dur", wrap).children].forEach((c) => c.setAttribute("aria-pressed", "false"));
       b.setAttribute("aria-pressed", "true");
+      updateSummary();
     });
     $("#dur", wrap).append(b);
   });
 
-  [["Yes", true], ["Seated only", false]].forEach(([label, val]) => {
+  [["Seated or standing", true], ["Seated only", false]].forEach(([label, val]) => {
     const b = el(`<button class="chip" type="button" aria-pressed="${S.intake.can_stand === val}">${label}</button>`);
     b.addEventListener("click", () => {
       S.intake.can_stand = val;
       S.intake.touched.stand = true;
       [...$("#stand", wrap).children].forEach((c) => c.setAttribute("aria-pressed", "false"));
       b.setAttribute("aria-pressed", "true");
+      updateSummary();
     });
     $("#stand", wrap).append(b);
   });
 
   const ask = () => {
     const text = $("#req", wrap).value.trim();
-    requestPlan(text || `I need a ${S.intake.duration_min} minute reset.`);
+    const selected = SYMPTOM_CARDS.find((s) => s.key === S.intake.symptom);
+    const fallback = selected
+      ? `My ${selected.label.toLowerCase()} need a reset. I have ${S.intake.duration_min} minutes and ${S.intake.can_stand ? "can stand" : "need to stay seated"}.`
+      : `I need a ${S.intake.duration_min} minute desk reset.`;
+    requestPlan(text || fallback);
   };
   $("#ask", wrap).addEventListener("click", ask);
   $("#req", wrap).addEventListener("keydown", (e) => {
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) ask();
   });
   bindMic($("#mic", wrap), $("#req", wrap), $("#micStatus", wrap));
+  updateSummary();
   return wrap;
 }
 
@@ -759,18 +800,22 @@ function viewPlan() {
           ${secs(k) ? `<span class="dur">${secs(k)}s</span>` : ""}</li>`).join("")}
       </ol>
 
-      ${S.why.length ? `<div class="why"><strong class="small">Why this?</strong>
-        <ul>${S.why.map((w) => `<li>${esc(w)}</li>`).join("")}</ul></div>` : ""}
+      ${S.why.length ? `<details class="why">
+        <summary><strong class="small">Why this reset?</strong>
+          <span class="tiny">Personalization, camera checks, and privacy</span></summary>
+        <ul>${S.why.map((w) => `<li>${esc(w)}</li>`).join("")}</ul>
+        <p class="tiny why-boundary">FlowReset provides general workplace-wellness guidance,
+          not diagnosis or treatment.</p></details>` : ""}
 
       <div class="stack-sm">
         <span class="eyebrow">Camera guidance</span>
         <p class="small muted">${p.camera_useful
-          ? "Optional. If you turn it on, the pose model on the box counts your reps and watches your range — frames are analysed in memory and never stored."
-          : "This routine doesn't need the camera."}</p>
+          ? "Recommended for live feedback. Frames are analysed in memory on the GB10 and immediately discarded."
+          : "Optional for this routine. The camera can confirm participation while the timer guides you."}</p>
         <div class="row">
-          <button class="btn" id="startCam" ${p.camera_useful ? "" : "hidden"}>Start with camera</button>
-          <button class="btn ${p.camera_useful ? "secondary" : ""}" id="startNoCam">Start without camera</button>
-          <button class="btn subtle" id="back">Something else</button>
+          <button class="btn" id="startCam">Start guided reset</button>
+          <button class="btn secondary" id="startNoCam">Continue without camera</button>
+          <button class="btn subtle" id="back">Change request</button>
         </div>
       </div>
     </div>
@@ -1113,7 +1158,6 @@ function viewWorkspace() {
   const payload = S.workspace;
   if (!payload) { loadWorkspace(); return el(`<div class="notice">Loading workspace view…</div>`); }
   const w = payload.workspace;
-  const labels = payload.symptom_labels || {};
 
   if (w.suppressed) {
     return el(`<div class="stack">
@@ -1153,12 +1197,6 @@ function viewWorkspace() {
     </div>
 
     <div class="card stack">
-      <div class="stack-sm"><h2>Where the discomfort sits</h2>
-        <p class="small muted">Useful for ergonomics decisions — which is the point of this view.</p></div>
-      <div id="areas"></div>
-    </div>
-
-    <div class="card stack">
       <h2>By team</h2>
       <div class="table-scroll"><table>
         <thead><tr><th>Team</th><th>Opted in</th><th>Resets</th><th>Per person / week</th><th>Completion</th></tr></thead>
@@ -1170,7 +1208,6 @@ function viewWorkspace() {
   </div>`);
 
   $("#split", wrap).append(charts.responseSplit(w.responses));
-  $("#areas", wrap).append(charts.areaBars(w.by_symptom, labels));
   (w.teams || []).forEach((t) => {
     $("#rows", wrap).append(el(`<tr>
       <td><strong>${esc(t.team)}</strong></td><td>${t.participants}</td><td>${t.sessions}</td>
@@ -1203,7 +1240,7 @@ function viewSettings() {
         you decline. Turning it off clears what it accumulated.</span></div>
         <button class="toggle" id="watch" aria-pressed="${S.prefs.watch_mode}" aria-label="Watch mode"></button></div>
       <div class="switch"><div class="txt"><strong>Share anonymous totals with my workspace</strong>
-        <span class="small muted">Sends counts only, and only inside a cohort of 5+ people.
+        <span class="small muted">Sends counts only, and only inside a cohort of 10+ people.
         Never your video, your symptoms, or your individual sessions.</span></div>
         <button class="toggle" id="ws" aria-pressed="${S.prefs.workspace_opt_in}" aria-label="Workspace sharing"></button></div>
       <div class="row">

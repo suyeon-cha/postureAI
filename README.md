@@ -112,7 +112,7 @@ way for half an hour is what leaves one hip tighter than the other.
 ### Workspace (B2B) mode
 
 `memory.workspace_summary()` aggregates in SQL and suppresses any cohort under
-`K_ANONYMITY = 5`. It takes no `user_id` parameter, so there is no per-person query to call.
+`K_ANONYMITY = 10`. It takes no `user_id` parameter, so there is no per-person query to call.
 Teams below the floor are suppressed entirely rather than rounded. Sharing is opt-in per user
 and off by default.
 
