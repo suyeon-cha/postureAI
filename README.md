@@ -1,23 +1,60 @@
-# postureAI — FlowReset
+# FlowReset
 
-A private wellbeing agent for desk workers, running entirely on the Dell Pro Max with GB10.
-You say what feels uncomfortable, how long you have, and whether you can stand. FlowReset
-picks the smallest reset that fits, guides the movement — with the camera only if you want —
-and remembers what actually helped.
+FlowReset is a local-first employee-wellness agent for desk workers, designed to run entirely
+on the Dell Pro Max with GB10. An employee says what feels uncomfortable, how much time they
+have, and whether they can stand. FlowReset selects an approved 1–10 minute reset, guides the
+movement—with the camera only after explicit consent—and remembers what helped.
 
-No video, prompts, or history leave the box. There is no cloud fallback.
+For employers, FlowReset provides an opt-in, aggregate workspace view of adoption and
+self-reported outcomes. Employers cannot access individual discomfort answers, camera data,
+audio, movement landmarks, or personal histories.
+
+No video, prompts, audio, or history are sent to an external AI provider. There is no cloud
+inference fallback.
 
 Dell × NVIDIA Local AI Hackathon, Seattle — July 26, 2026.
 
-## Two modes, one agent
+## Why FlowReset
+
+Desk workers do not need another generic reminder to “take a break.” They need an answer to:
+
+> I feel uncomfortable right now. What is the smallest useful reset I can do, and am I
+> performing it safely enough to continue?
+
+FlowReset turns that moment into an agentic workflow: understand the employee's concern,
+retrieve approved movements, compose a time-appropriate plan, request camera consent, evaluate
+selected movement signals, give one concise cue, collect a Better/Same/Worse response, and
+adapt future recommendations.
+
+This is a general-wellness product, not medical care, physical therapy, or a posture-grading
+surveillance system.
+
+## Product modes, one local agent
 
 | Mode | Trigger | Camera | Default |
 |---|---|---|---|
 | **Reset** (the golden path) | You ask for one | Off until you opt in, per session | ✅ on |
 | **Watch** | Accumulated sitting / neck / crossed-leg time crosses a threshold, then it *offers* | Off unless you enable watch mode | ❌ off |
+| **Workspace** (B2B) | An authorized wellbeing lead opens aggregate reporting | Not available to the employer | Opt-in aggregates only |
 
 Watch mode never starts a session, stops asking when you decline, and clears its accumulator
-when switched off. Reset mode is what the live demo uses.
+when switched off. Reset mode is what the live demo uses. Workspace mode suppresses cohorts
+with fewer than 10 opted-in employees.
+
+## End-to-end employee workflow
+
+1. **Onboard:** choose goals, common discomfort areas, standing constraints, preferred
+   duration, and coach style. The optional concerns field accepts text or local voice input.
+2. **Ask:** select an area or describe the need, for example: “My legs and glutes feel stiff.
+   I have three minutes and can stand.”
+3. **Plan:** the agent reads private preferences and local history, then composes a plan only
+   from the approved exercise library.
+4. **Consent:** the employee reviews “Why this?” and chooses whether to enable camera guidance.
+5. **Guide:** local pose analysis measures supported signals such as framing, range, tempo,
+   repetition phase, and selected form faults. The agent returns one authored cue at a time.
+6. **Reflect:** the employee selects Better, Same, or Worse.
+7. **Remember:** FlowReset stores the minimum session summary locally and updates the employee
+   dashboard. Only eligible opt-in aggregates can contribute to the workspace view.
 
 ## Architecture
 
@@ -41,13 +78,18 @@ All inference is local: **`qwen3:8b`** (agent reasoning and coach language) and
 faster-whisper STT. `agent/llm.py` refuses any non-loopback/non-private inference endpoint at
 import time — a stray cloud URL crashes the app instead of quietly working.
 
-### The agent is ours; the framework is not the agent
+### The agent is ours; the required framework is not the agent
 
 `agent/runtime.py` is an adapter with one interface: `run(messages, tools, on_step)`.
 
 - `native` — a complete, working tool-calling loop against local Qwen. **Default.**
-- `nemoclaw` / `openclaw` — thin adapters. Two lines marked `TODO(box)` each; set
-  `FLOWRESET_RUNTIME=nemoclaw` on the box and nothing else in the app changes.
+- `nemoclaw` / `openclaw` — thin adapters for the approved NeMoClaw or OpenClaw runtime.
+
+**Competition gate:** `native` is useful for development but is not an approved judging
+runtime. Before submission, complete the event-image adapter in `agent/runtime.py`, set
+`FLOWRESET_RUNTIME=nemoclaw` or `FLOWRESET_RUNTIME=openclaw`, and verify that `/api/health`
+and the visible agent trace report that runtime. Do not claim rules compliance while the
+runtime still reports `native`.
 
 Everything that makes FlowReset a product — system instructions and coach styles, the intake
 state machine, the six tool definitions and implementations, the approved-routine policy,
@@ -68,32 +110,38 @@ Two guardrails matter more than the rest:
   corrections come from the detectors' named faults and the library's wording. The model
   decides *whether and when* to speak, not *what the correction is*.
 
-### 1 minute to 10 minutes
+### One-minute to several-minute resets
 
 `agent/routines.py` spends a time budget over moves ranked for the stated symptom, so the same
 request yields a 60-second reset between meetings or a 10-minute one at the end of the day.
 Longer sessions cycle back through the ranked list without ever repeating a move
-back-to-back; anything 2 minutes or over reserves room for a closing breath.
+back-to-back; anything 2 minutes or over reserves room for a closing breath. The current
+duration choices are 1, 2, 3, 5, and 10 minutes.
 
 ### Scope: five areas, including lower body
 
 Neck & shoulders · Back & hips · **Legs & glutes** · Wrists & hands · Tired eyes.
 
-Long sitting leaves glutes under-used and hip flexors short, so the library loads as well as
-stretches: `chair_squat` (sit-to-stand), `hip_hinge`, `lunge`, `glute_squeeze`, and
-`figure_four`. These are the only moves that load a muscle rather than lengthen one, so they
-carry the strictest form rules in `perception/detectors.py`:
+Long periods of sitting can leave employees feeling stiff or underactive through the hips,
+legs, and glutes. The approved library therefore includes strengthening movements as well as
+mobility work: `chair_squat` (sit-to-stand), `hip_hinge`, `lunge`, `glute_squeeze`, and
+`figure_four`. Loaded movements carry stricter prototype form rules in
+`perception/detectors.py`:
 
 - **Lunge** — `knee_past_toes` (front knee travel, normalized by shin length so distance from
   the camera doesn't matter), `knee_valgus`, `torso_pitched`, `too_shallow`, `too_fast`.
-  Ordered by what hurts if you get it wrong; the agent still speaks at most one cue.
+  The agent still speaks at most one cue.
 - **Sit-to-stand / hinge** — `knee_valgus`, `rounding` (hips back, not spine bending),
   `locked_knees`.
 
 Crossed legs are handled as *duration*, not posture: `legs_crossed()` compares ankle and hip
 ordering, and watch mode accrues time held on one side. Uncrossing resets the counter, because
-switching sides genuinely relieves the load. Crossing your legs is not a defect; staying that
-way for half an hour is what leaves one hip tighter than the other.
+the system is measuring sustained position rather than labeling the posture as inherently
+wrong. Crossing your legs is not treated as a defect.
+
+These checks are broad prototype signals, not clinical validation of “correct form.” A
+production deployment would require exercise-professional review, a versioned content
+approval process, broader-body testing, and confidence-threshold evaluation.
 
 ## Privacy, concretely
 
@@ -101,10 +149,11 @@ way for half an hour is what leaves one hip tighter than the other.
   never written to disk. `/api/health` reports `frames_stored`, and it is always `0`.
 - Qwen never receives raw video. It gets work context, user choices, and structured movement
   metrics. The vision judge sees one frame, rarely, and only for planes geometry can't read.
-- **Voice input does not use the Web Speech API.** That browser API streams microphone audio to
-  Google's servers — one line of JavaScript that would break both the competition rule and
-  every privacy claim in the pitch. The UI records locally and POSTs to `/api/transcribe`,
-  where faster-whisper runs on the box. The temp file is unlinked before the response returns.
+- **Voice input does not use the Web Speech API.** The UI records locally and POSTs to
+  `/api/transcribe`, where faster-whisper runs on the box. The temp file is unlinked before
+  the response returns. Voice can elaborate on concerns during onboarding and can describe a
+  new reset request. If the local Whisper model is unavailable, the mic control hides and the
+  text field remains usable.
 - Memory stores symptom, routine, duration, and a Better/Same/Worse answer. No landmarks, no
   video, no audio, no scores.
 - Settings has a real export and a real delete.
@@ -116,29 +165,72 @@ way for half an hour is what leaves one hip tighter than the other.
 Teams below the floor are suppressed entirely rather than rounded. Sharing is opt-in per user
 and off by default.
 
+The B2B product model is an employer wellness license with employee-controlled participation.
+The workspace dashboard focuses on program adoption, completed resets, common support areas,
+and Better/Same/Worse trends. It is not an employee-performance dashboard and does not expose
+individual posture, attendance, pain, camera, or productivity data.
+
+## Hackathon rules and current compliance
+
+| Requirement | FlowReset implementation | Status |
+|---|---|---|
+| Build the agent during the event | Team-authored prompts, state machine, tool registry, policies, memory, safety rules, trace, and UI live in this repository | Implemented |
+| Use NeMoClaw, OpenClaw, or OpenShell | Runtime adapter boundary exists in `agent/runtime.py` | **Must be completed and selected on the event GB10** |
+| Run all inference locally on GB10 | Qwen reasoning and vision via local Ollama, MediaPipe pose, faster-whisper STT, and Piper TTS | Implemented; verify with the actual model assets |
+| No cloud AI API | `agent/llm.py` rejects non-loopback/non-private inference hosts; no external AI credentials are required | Implemented |
+| Additional models available locally | Model paths are configured for assets copied from the event drive | Verify on GB10 |
+| Demo runs on Dell Pro Max with GB10 | FastAPI, agent, perception, memory, and model services run on the box; MacBook is capture/display only | Verify end to end |
+| Agent is built, not prebuilt | The approved runtime supplies execution infrastructure; FlowReset supplies the agent behavior and tools | Implemented |
+
+The submission is eligible only after the approved runtime row passes. The judging path must
+show a real local model response and real local tool calls; the preview/mock mode is not a
+substitute.
+
+### How to prove local-first operation
+
+1. Start the approved runtime and local models on the GB10.
+2. Show `/api/health`: approved runtime active, local LLM reachable, pose available,
+   `frames_stored: 0`, and no external AI APIs.
+3. Run `./scripts/verify-local.sh`.
+4. Block external internet egress while preserving the MacBook-to-GB10 LAN/SSH connection.
+5. Complete request → tool calls → camera guidance → outcome with the network blocked.
+6. Show the local agent trace and keep a terminal recording as backup evidence.
+
 ## Quickstart (on the box)
 
 ```bash
 pip install -r requirements.txt
 ```
 
-Models come from the USB drive:
+Models must be available locally on the event drive. Copy them to the box before blocking
+egress:
 
 ```bash
-ollama pull qwen3:8b && ollama pull qwen2.5vl:7b   # or copy into ~/.ollama/models
+# Copy/import the event-provided Ollama model blobs into the local Ollama store.
 cp /Volumes/<drive>/pose_landmarker_heavy.task models/
 cp /Volumes/<drive>/en_US-amy-medium.onnx models/            # optional, voice out
 cp -r /Volumes/<drive>/faster-whisper-base.en models/        # optional, voice in
 ```
 
-Seed the demo history, then run:
+Configure the approved runtime, seed the demo history, then run:
 
 ```bash
+cp .env.example .env
+export FLOWRESET_RUNTIME=nemoclaw   # or openclaw after completing the event adapter
 python -m server.seed
 uvicorn server.main:app --host 0.0.0.0 --port 8000
 ```
 
-Open `http://<box-ip>:8000` from the MacBook. See `.env.example` for every knob.
+On the MacBook, forward the server through SSH:
+
+```bash
+ssh -L 8000:localhost:8000 dell@<box-ip>
+```
+
+Then open `http://localhost:8000`. Using localhost is important because browsers allow webcam
+and microphone access on secure contexts; a plain `http://<box-ip>:8000` page may not receive
+those permissions. Ollama remains bound to `127.0.0.1` on the GB10 and is never exposed to the
+MacBook. See `.env.example` for every configuration option.
 
 ### Verify it's local before you demo
 
@@ -186,6 +278,37 @@ no model is running, so a shared preview can't be mistaken for local inference.
 
 **Contracts between lanes live in [contracts.md](contracts.md). Read it first.
 Change it only by team agreement — it's the constitution.**
+
+## Technical plan and remaining gates
+
+| Priority | Work | Definition of done |
+|---|---|---|
+| P0 | Approved runtime | NeMoClaw or OpenClaw executes the same FlowReset tool registry; health and trace show the approved runtime |
+| P0 | GB10 model assets | Reasoning model, vision model, pose model, Whisper, and optional Piper resolve without downloading or calling external AI |
+| P0 | Golden-path integration | MacBook voice/camera → SSH tunnel → GB10 agent/vision → visible and spoken cue → saved outcome |
+| P0 | Offline verification | Golden path succeeds with external egress blocked |
+| P0 | Demo reliability | Three clean runs plus a recorded backup with audible local voice coaching |
+| P1 | Voice input | Local faster-whisper supports onboarding concerns and reset intake; typed fallback remains available |
+| P1 | Lower-body validation | Calibrate lunge and sit-to-stand thresholds against varied bodies, clothing, camera angles, and mobility ranges |
+| P2 | Production knowledge governance | Exercise-professional approval, content versioning, evaluation set, accessibility review, and deployment controls |
+
+Do not spend the final build window expanding the exercise library. The strongest live demo is
+one reliable, camera-guided reset, while the interface and approved library show the broader
+1–10 minute and lower-body scope.
+
+## Recommended live demo
+
+1. An employee uses local voice intake: “My hips and legs feel stiff after sitting. I have
+   three minutes and I can stand.”
+2. The agent reads private preferences/history and calls `select_approved_routine`.
+3. The employee reviews “Why this?” and enables the camera.
+4. Use a chair sit-to-stand for the most robust demo, or a split-stance lunge only after
+   successful calibration. Intentionally trigger one supported fault and let FlowReset speak
+   one approved correction.
+5. Complete the reset, choose Better, and show the personal dashboard update.
+6. Open Workspace to show only k-anonymized aggregate data.
+7. Show the approved runtime trace and repeat the local-first proof with external egress
+   blocked.
 
 ## Deadlines (hard)
 
