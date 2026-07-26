@@ -929,6 +929,9 @@ async function beginSession(withCamera) {
   send({ type: "start_reset", camera, symptom: S.plan.symptom, duration_min: S.plan.duration_min, can_stand: S.intake.can_stand });
   S.screen = "session";
   render();
+  // Only now does <video id="cam"> exist. Without this the stream is live but
+  // orphaned, and the user sees a black panel with the camera light on.
+  if (camera) attachStream();
 }
 
 function viewSession() {
@@ -979,9 +982,27 @@ function viewSession() {
           </div>
         </div>
         <div class="row small muted" id="metrics"></div>
+        <div class="ask-row">
+          <span class="small muted">Ask mid-session:</span>
+          <button class="chip-btn" data-ask="Where should I feel this?">Where should I feel this?</button>
+          <button class="chip-btn" data-ask="What muscles am I working?">What muscles?</button>
+          <button class="chip-btn" data-ask="Am I doing it right?">Am I doing it right?</button>
+        </div>
       </div>
     </div>
   </div>`);
+
+  // Answered from authored anatomy, so these work with speech-to-text absent.
+  // A Whisper transcript hits the same endpoint when voice input is available.
+  wrap.querySelectorAll("[data-ask]").forEach((b) =>
+    b.addEventListener("click", () =>
+      fetch("/api/ask", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: b.dataset.ask, move: S.session?.move }),
+      }).catch(() => {})
+    )
+  );
 
   $("#pause", wrap).addEventListener("click", (e) => {
     const on = e.target.textContent === "Pause";
@@ -1112,13 +1133,23 @@ async function startCamera() {
   } catch {
     return false;
   }
-  const video = $("#cam");
-  if (video) {
-    video.srcObject = videoStream;
-    await video.play().catch(() => {});
-  }
-  startFrameLoop();
+  attachStream();
   return true;
+}
+
+/** Bind the live stream to whatever <video id="cam"> currently exists.
+ *
+ * Separate from startCamera() because the consent click happens on the plan
+ * screen, one render *before* the session DOM exists — so the element the
+ * stream needs isn't there yet. Permission would be granted, the camera light
+ * would come on, and the panel would stay black. Call this after any render
+ * that (re)creates the video element. */
+function attachStream() {
+  const video = $("#cam");
+  if (!video || !videoStream) return;
+  if (video.srcObject !== videoStream) video.srcObject = videoStream;
+  video.play().catch(() => {});
+  startFrameLoop();
 }
 
 /* The only place camera data moves. Frames go to the box over the LAN and
@@ -1126,12 +1157,14 @@ async function startCamera() {
 function startFrameLoop() {
   stopFrameLoop();
   if (S.preview) return; // nothing to send frames to
-  const video = $("#cam");
   const scratch = document.createElement("canvas");
   scratch.width = 320;
   scratch.height = 240;
   const ctx = scratch.getContext("2d");
   frameTimer = setInterval(() => {
+    // Looked up per tick, not captured: render() replaces the video element,
+    // and a stale reference silently stops the pose feed.
+    const video = $("#cam");
     if (!video || video.readyState < 2) return;
     ctx.drawImage(video, 0, 0, scratch.width, scratch.height);
     const data = scratch.toDataURL("image/jpeg", 0.6).split(",")[1];

@@ -478,6 +478,14 @@ textarea::placeholder { color: var(--ink-3); }
 }
 .move-name { font-size: 1.22rem; font-weight: 580; }
 .move-cue { color: var(--ink-2); max-width: 40ch; }
+
+.ask-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.chip-btn {
+  background: var(--surface-2, transparent); color: var(--ink-2);
+  border: 1px solid var(--line, #363242); border-radius: 999px;
+  padding: 6px 14px; font-size: 13px; cursor: pointer;
+}
+.chip-btn:hover { border-color: var(--accent); color: var(--ink); }
 .move-muscles {
   color: var(--ink-3, var(--ink-2)); font-size: 13px; letter-spacing: .02em;
   margin-top: 6px; text-transform: lowercase;

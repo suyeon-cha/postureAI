@@ -114,6 +114,84 @@ def analyze_pose(move: str | None = None) -> dict[str, Any]:
     }
 
 
+#: Question intents we can answer from authored copy. Matched by keyword
+#: rather than by model, so a user asking "where do I feel this" gets the same
+#: correct anatomy whether or not Ollama is reachable — and never gets an
+#: invented one. Order matters: first match wins.
+QUESTION_INTENTS: list[tuple[str, tuple[str, ...]]] = [
+    ("feel", ("where", "feel", "feeling", "supposed to feel", "should i feel")),
+    ("muscle", ("muscle", "muscles", "working", "target", "targeting", "which group")),
+    # `why` must precede `form`: "why am I doing this" contains "am i", and
+    # form's keywords are the loosest in the set, so it swallows anything left.
+    ("why", ("why", "point of", "what's this for", "what is this for", "purpose")),
+    ("form", ("right", "correct", "doing it right", "am i", "look ok", "how am i")),
+]
+
+
+def classify_question(text: str) -> str:
+    """Map a free-text question onto an answerable intent. 'feel' is the default
+    because it is what people actually mean when they trail off mid-stretch."""
+    low = (text or "").lower()
+    for intent, keys in QUESTION_INTENTS:
+        if any(k in low for k in keys):
+            return intent
+    return "feel"
+
+
+def answer_question(
+    text: str, move: str | None = None, metrics: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """Answer an in-session question from authored copy.
+
+    Anatomy comes from muscles.yaml verbatim. A model that invents "you should
+    feel this in your rotator cuff" is worse than saying nothing, so the model
+    is never in this path — it only decides *when* the user is asking.
+    """
+    if not move:
+        return {"answer": None, "reason": "no active move", "intent": None}
+    try:
+        spec = routines.describe_move(move)
+    except routines.NoApprovedRoutine:
+        return {"answer": None, "reason": f"{move} not approved", "intent": None}
+
+    intent = classify_question(text)
+    muscles = spec.get("muscles") or {}
+    primary = muscles.get("primary") or []
+    name = spec.get("name", move)
+
+    if intent == "feel" and muscles.get("feel"):
+        answer = f"You should feel {muscles['feel']}."
+        if muscles.get("not_feel"):
+            answer += f" Not {muscles['not_feel']}."
+    elif intent == "muscle" and primary:
+        listed = " and ".join(primary)
+        answer = f"{name} works your {listed}."
+        if muscles.get("why"):
+            answer += f" {muscles['why']}"
+    elif intent == "why" and muscles.get("why"):
+        answer = muscles["why"]
+    elif intent == "form":
+        # The only intent that reads live geometry rather than the library.
+        m = metrics or analyze_pose(move)
+        faults = m.get("recent_faults") or []
+        if faults:
+            cue = spec.get("cues", {}).get(f"fault_{faults[0]}")
+            answer = cue or "Ease off a little and reset your position."
+        elif m.get("camera_on"):
+            rng = m.get("range_quality")
+            answer = (
+                "Looks good — range and tempo are where they should be."
+                if rng in ("good", "unknown")
+                else "You're safe, but go a little further into the range if you can."
+            )
+        else:
+            answer = f"The camera is off, so I can't see you. {spec.get('cues', {}).get('during', '')}".strip()
+    else:
+        answer = spec.get("cues", {}).get("during") or f"Keep going with {name}."
+
+    return {"answer": answer, "intent": intent, "move": move, "source": "authored"}
+
+
 def generate_coaching_cue(
     metrics: dict[str, Any] | None = None,
     move: str | None = None,

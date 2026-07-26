@@ -305,6 +305,9 @@ class FlowResetAgent:
         if kind == "mind_muscle":
             return self._speak(self._mind_muscle_cue(move), prefs)
 
+        if kind == "user_speech":
+            return self.answer(event.get("detail") or "", move)
+
         if kind == "move_complete":
             return self._speak(self._transition(move), prefs, force=True)
 
@@ -349,6 +352,24 @@ class FlowResetAgent:
             "routine": None,
             "offer": {"symptom": offer_symptom, "duration_min": 2},
         }
+
+    def answer(self, question: str, move: str | None) -> dict[str, Any] | None:
+        """Answer a question asked mid-session, by voice or by tapping.
+
+        `force=True`: the user asked, so the 6-second cue spacing that keeps
+        unprompted coaching calm must not swallow the reply.
+        """
+        prefs = memory.get_prefs(self.user_id)
+        result = tools.answer_question(question, move)
+        self._emit(
+            {
+                "kind": "tool",
+                "name": "answer_question",
+                "arguments": {"question": question, "move": move},
+                "result": result,
+            }
+        )
+        return self._speak(result.get("answer"), prefs, force=True)
 
     def _mind_muscle_cue(self, move: str | None) -> str | None:
         """Name the muscle while they can feel it working.

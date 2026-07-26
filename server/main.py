@@ -457,6 +457,21 @@ async def plan(body: dict[str, Any]) -> JSONResponse:
     return JSONResponse({**result, "trace": agent.trace})
 
 
+@app.post("/api/ask")
+async def ask(body: dict[str, Any]) -> JSONResponse:
+    """A question asked mid-session: "where should I feel this?"
+
+    Same handler whether it arrived by voice (Whisper transcript) or by tapping
+    a button, so the feature works with speech-to-text absent.
+    """
+    question = body.get("text", "")
+    move = body.get("move") or (session.tracker.move if session.tracker else None)
+    message = await asyncio.to_thread(agent.answer, question, move)
+    if message:
+        await _emit_coach(message)
+    return JSONResponse(message or {"type": "coach", "text": None, "speak": False})
+
+
 @app.post("/api/frame")
 async def frame(body: dict[str, Any]) -> JSONResponse:
     ok = await asyncio.to_thread(frame_sink.push_jpeg_b64, body.get("data", ""))
