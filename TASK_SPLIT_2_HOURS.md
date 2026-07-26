@@ -3,6 +3,47 @@
 Three people build in parallel for two hours, followed by one shared hour for integration,
 evaluation, recording, and submission preparation.
 
+## Hardware reality: one shared Dell GB10
+
+The team has **one Dell Pro Max with GB10**, not one box per engineer. The three personal
+laptops are development, camera, microphone, and documentation clients. They do not run the
+submitted AI inference path.
+
+```text
+Software engineer's laptop ──┐
+Full-stack MacBook ──────────┼── SSH / local network ──> one Dell Pro Max with GB10
+PM laptop ───────────────────┘                            agent + models + pose + memory
+```
+
+Only one copy of Ollama, the FlowReset server, pose inference, and the approved agent runtime
+should run on the Dell. Do not start competing servers or duplicate model processes from
+different SSH sessions.
+
+### Single-box access policy
+
+- The **software engineer is the sole box operator** during the two-hour build. This person
+  starts/stops services, changes environment variables, installs dependencies, copies models,
+  and owns the canonical GB10 checkout.
+- The **full-stack engineer develops against `ui/mock.js` first**, then connects the MacBook to
+  the single shared server after Person 1 declares it ready. They may inspect logs over SSH but
+  should not restart or reconfigure services.
+- The **data consultant/PM does not require GB10 access** during parallel work. They use the
+  preview, screenshots, test matrix, and recorded results until the shared validation hour.
+- Code moves to the Dell through small reviewed commits. The box operator pulls or
+  cherry-picks them at the scheduled integration checkpoints.
+- If the Dell is being restarted or its runtime is changing, Person 1 announces a short
+  maintenance window so Person 2 does not mistake expected downtime for an application bug.
+
+### Shared Dell schedule
+
+| Time | Dell access | What everyone else does |
+|---|---|---|
+| T+0–40 | Person 1 exclusive: models, approved runtime, server, health | Person 2 uses the mock/preview; Person 3 prepares content and evaluation |
+| T+40–70 | Persons 1 and 2 pair: one server, one MacBook camera/mic client | Person 3 reviews movement rules and observes test results |
+| T+70–100 | Person 1 tunes inference while Person 2 consumes the same live endpoints | Person 3 executes the evaluation matrix without changing box services |
+| T+100–120 | One integrated build only; Person 1 controls restarts | Persons 2 and 3 perform judging-path QA |
+| T+120–180 | All three validate the single frozen GB10 build | No parallel server or model changes |
+
 ## Outcome for the build window
 
 By T+120, FlowReset must complete one repeatable judging path:
@@ -52,6 +93,7 @@ calibrate. Use a **split-stance lunge** only if it passes the camera evaluation 
 - Do not edit another owner's files without asking in the team channel.
 - Contract changes require all three people to agree.
 - Commit small, working checkpoints instead of one large final commit.
+- Only Person 1 operates the Dell services; parallel coding happens on the three laptops.
 - The software engineer owns the critical path. If the approved runtime is blocked, stop
   optional work and help resolve it.
 - No new features after T+100.
@@ -115,10 +157,10 @@ with Person 1.
 
 | Time | Task | Deliverable |
 |---|---|---|
-| T+0–20 | Start the SSH tunnel and verify WebSocket, camera, microphone, and local health data | MacBook opens `http://localhost:8000` and reaches the GB10 |
-| T+20–45 | Exercise the complete onboarding and intake path, including local voice concerns | Transcription fills the field; typed fallback remains usable |
-| T+45–70 | Polish live-session states: camera permission, framing, listening, analyzing, coaching, paused, completed | The user always knows what the system is doing |
-| T+70–90 | Integrate pose events and spoken feedback; confirm camera-off mode still works | Visible cue, local voice cue, overlay, timer, and Stop control remain synchronized |
+| T+0–20 | Use `ui/mock.js` to review onboarding, intake, and the complete judging flow without using the Dell | UI work continues while Person 1 prepares the box |
+| T+20–40 | Polish live-session states: camera permission, framing, listening, analyzing, coaching, paused, completed | The user always knows what the system is doing |
+| T+40–60 | After Person 1 declares the server ready, start one SSH tunnel and verify WebSocket, camera, microphone, and health data | MacBook opens `http://localhost:8000` and reaches the single GB10 server |
+| T+60–90 | Integrate pose events and spoken feedback; exercise onboarding voice and confirm camera-off/text fallbacks | Visible cue, local voice cue, overlay, timer, and Stop control remain synchronized |
 | T+90–105 | Add/retest failure recovery: denied permission, lost framing, tunnel drop, server restart, unavailable STT/TTS | Clear recovery instructions with no dead end |
 | T+105–120 | Add one-click demo reset, rebuild the preview, and capture a clean fallback flow | Repeatable judging setup and preview backup |
 
@@ -200,7 +242,7 @@ Avoid:
 ### T+15 — Environment gate
 
 - Person 1 confirms model/runtime availability.
-- Person 2 confirms the SSH tunnel and browser permissions.
+- Person 2 confirms the mock/preview path and browser permission requirements.
 - Person 3 announces the frozen golden path.
 
 If the required runtime is not importable, ask the event mentor immediately. Do not wait until
@@ -210,6 +252,7 @@ the validation hour.
 
 - Approved runtime has completed at least one real tool call.
 - A frame reaches the GB10 and produces landmarks.
+- The MacBook is connected to the one shared server through its SSH tunnel.
 - Chair sit-to-stand has a usable detector.
 - PM decides whether lunge is safe enough for the demo.
 
@@ -229,8 +272,8 @@ Only fix judging-path defects. No new routines, screens, integrations, or charts
 
 ### T+120 — Code freeze
 
-Merge the three branches into `main`, tag the judging build, restart every service, and begin
-the shared validation hour.
+Merge the three branches into `main`, update the canonical checkout on the single Dell, tag
+the judging build, restart its services once, and begin the shared validation hour.
 
 ## Final one-hour integration and evaluation
 
