@@ -36,7 +36,9 @@ The UI is a pure renderer of this blob. Everything on screen comes from here.
     "elapsed": 37.5,                // (v1.1) seconds since the routine started
     "paused": false,                // (v1.1)
     "form": "ok",                   // "ok" | "fault" | "checking"  (checking = VLM judging)
-    "tempo": "good"                 // "good" | "too_fast"
+    "tempo": "good",                // "good" | "too_fast"
+    "target_muscles": ["lower trapezius", "rhomboids"]  // (v1.2) primary muscles,
+                                    // from agent/muscles.yaml; shown for the whole move
   },
   "framing": "full_body",           // "full_body" | "torso_only" | "no_person"
   "camera_on": true                 // (v1.1) UI renders the consent state from this,
@@ -75,6 +77,7 @@ Event catalog:
 | `framing_lost` | required keypoints missing for current move | "need_ankles" |
 | `user_speech` | push-to-talk transcript ready (stretch goal) | transcript text |
 | `routine_complete` *(v1.1)* | last move in the routine finished | — |
+| `mind_muscle` *(v1.2)* | once per move, after rep 2 or 4s into a hold — never alongside a fault | — |
 
 Form-fault `detail` values are the authoritative list, because each one must
 have a matching `cues.fault_<detail>` key in exercises.yaml or no cue is spoken:

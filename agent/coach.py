@@ -302,6 +302,9 @@ class FlowResetAgent:
             )
             return self._speak(cue.get("cue"), prefs)
 
+        if kind == "mind_muscle":
+            return self._speak(self._mind_muscle_cue(move), prefs)
+
         if kind == "move_complete":
             return self._speak(self._transition(move), prefs, force=True)
 
@@ -346,6 +349,25 @@ class FlowResetAgent:
             "routine": None,
             "offer": {"symptom": offer_symptom, "duration_min": 2},
         }
+
+    def _mind_muscle_cue(self, move: str | None) -> str | None:
+        """Name the muscle while they can feel it working.
+
+        Authored copy from muscles.yaml, never model prose — the whole value is
+        that it points at the right place on the body, and a hallucinated
+        anatomy lesson is worse than silence.
+        """
+        if not move:
+            return None
+        entry = routines.muscles_for(move)
+        if not entry or not entry.get("feel"):
+            return None
+        primary = entry.get("primary") or []
+        muscle = primary[0] if primary else None
+        feel = entry["feel"]
+        if muscle:
+            return f"That's your {muscle} working. You should feel {feel}."
+        return f"You should feel {feel}."
 
     def _transition(self, move: str | None) -> str:
         if not move:

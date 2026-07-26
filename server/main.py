@@ -428,7 +428,8 @@ async def set_prefs(patch: dict[str, Any]) -> JSONResponse:
 async def library() -> JSONResponse:
     lib = routines.load_library()
     return JSONResponse({
-        "moves": {k: {**v, "key": k} for k, v in lib.items()},
+        # describe_move(), not the raw library — it merges in the muscle map.
+        "moves": {k: routines.describe_move(k) for k in lib},
         "symptoms": routines.SYMPTOM_LABELS,
         "durations": routines.DURATION_CHOICES_MIN,
     })

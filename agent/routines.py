@@ -20,6 +20,12 @@ import yaml
 
 LIBRARY_PATH = Path(__file__).with_name("exercises.yaml")
 
+# The teaching layer, kept separate from the safety boundary on purpose:
+# exercises.yaml gates what may be prescribed, muscles.yaml only says what to
+# feel while doing it. A move with no muscle entry still works — it just
+# teaches nothing.
+MUSCLES_PATH = Path(__file__).with_name("muscles.yaml")
+
 # Durations the UI offers. Elva's note: this is a 1-minute *to several-minute*
 # product, not a fixed microbreak.
 DURATION_CHOICES_MIN = [1, 2, 3, 5, 10]
@@ -64,12 +70,28 @@ def move_names() -> list[str]:
     return sorted(load_library())
 
 
+@functools.lru_cache(maxsize=1)
+def load_muscles() -> dict[str, dict[str, Any]]:
+    """Muscle map. Missing file is survivable — coaching just loses the why."""
+    try:
+        with MUSCLES_PATH.open() as fh:
+            return yaml.safe_load(fh) or {}
+    except FileNotFoundError:
+        return {}
+
+
+def muscles_for(key: str) -> dict[str, Any] | None:
+    return load_muscles().get(key)
+
+
 def describe_move(key: str) -> dict[str, Any]:
     lib = load_library()
     if key not in lib:
         raise NoApprovedRoutine(f"{key!r} is not in the approved library")
     move = dict(lib[key])
     move["key"] = key
+    if entry := muscles_for(key):
+        move["muscles"] = entry
     return move
 
 
@@ -152,7 +174,13 @@ def compose(
     while spent + 25 <= budget - reserve and guard < 60:
         guard += 1
         unused = [kv for kv in candidates if kv[0] not in moves]
-        pool = unused or [kv for kv in candidates if kv[0] != moves[-1]]
+        # Gentle stretches can come round again in a long session; loaded work
+        # cannot. Two sets of lunges inside one desk break is a different
+        # product, and it reads as a bug even when it fits the budget.
+        pool = unused or [
+            kv for kv in candidates
+            if kv[0] != moves[-1] and kv[1].get("intensity") != "moderate"
+        ]
         if not pool:
             break
         affordable = [kv for kv in pool if spent + kv[1].get("seconds", 40) <= budget - reserve]
