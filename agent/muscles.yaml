@@ -1,0 +1,199 @@
+# Muscle map — what each approved move actually trains, in plain English.
+#
+# WHY THIS IS A SEPARATE FILE: exercises.yaml is the safety boundary (which
+# movements may reach a user). This is the teaching layer (what to feel while
+# doing them). Keeping them apart means someone can improve the coaching
+# language without touching the file that gates what the model may prescribe.
+#
+# Fields:
+#   primary     muscles doing the work — the ones to feel. Plain names, not Latin.
+#   secondary   supporting cast. Shown, never cued — one target at a time.
+#   feel        WHERE it should be felt. This is the mind-muscle cue itself, so
+#               it names a location on the body, not an instruction to move.
+#   not_feel    where it should NOT be felt — the most useful correction there is,
+#               because feeling it in the wrong place means the wrong muscle is working.
+#   why         one sentence: why this matters for someone who sits all day.
+#
+# A move with no entry here still works. It just teaches nothing, so add one.
+
+neck_side_stretch:
+  primary: [upper trapezius, levator scapulae]
+  secondary: [scalenes]
+  feel: "a long line down the side of your neck into the top of your shoulder"
+  not_feel: "a pinch at the base of your skull — ease off if you feel that"
+  why: "The upper traps hold your head up all day. They shorten when the screen is too low."
+
+chin_tuck:
+  primary: [deep neck flexors]
+  secondary: [upper trapezius]
+  feel: "the back of your neck lengthening, and a small effort at the front of your throat"
+  not_feel: "your jaw clenching — the work is deeper than that"
+  why: "These deep muscles hold your head over your shoulders. Screen time lets them switch off."
+
+shoulder_rolls:
+  primary: [trapezius, rhomboids]
+  secondary: [deltoids]
+  feel: "your shoulder blades sliding up, back, and down your ribcage"
+  not_feel: "your neck straining — keep the movement in the shoulders"
+  why: "Typing keeps your shoulder blades still for hours. This restores their full path."
+
+trap_stretch:
+  primary: [upper trapezius]
+  secondary: [levator scapulae]
+  feel: "a broad stretch from your ear down to the anchored shoulder"
+  not_feel: "any pulling in the front of your throat"
+  why: "The single most reliably tight muscle in desk workers."
+
+chest_opener:
+  primary: [pectoralis major, pectoralis minor]
+  secondary: [anterior deltoid, biceps]
+  feel: "a widening across the front of your chest and collarbones"
+  not_feel: "compression in your lower back — keep your ribs down"
+  why: "A keyboard pulls your arms forward all day, and your chest shortens to match."
+
+y_raise:
+  primary: [lower trapezius, rhomboids]
+  secondary: [posterior deltoid, serratus anterior]
+  feel: "the muscles between and just below your shoulder blades switching on"
+  not_feel: "your shoulders climbing toward your ears — that's the upper traps taking over"
+  why: "Lower traps are the antidote to rounded shoulders, and they are almost always asleep."
+
+seated_twist:
+  primary: [obliques, spinal rotators]
+  secondary: [latissimus dorsi]
+  feel: "a gentle wringing through your waist and mid-back"
+  not_feel: "your lower back complaining — the turn comes from the ribcage"
+  why: "Your spine is built to rotate. A chair removes almost every chance to do it."
+
+cat_cow:
+  primary: [spinal erectors, abdominals]
+  secondary: [serratus anterior]
+  feel: "each vertebra moving in turn, from your tailbone to your neck"
+  not_feel: "one hinge point doing all the work"
+  why: "Sitting locks your spine into a single shape. This moves it through its whole range."
+
+thoracic_extension:
+  primary: [thoracic erectors]
+  secondary: [pectoralis major, lower trapezius]
+  feel: "your upper back opening backward over the chair edge"
+  not_feel: "your lower back doing the bending — keep it high"
+  why: "The mid-back is where sitting posture collapses first, and where it is easiest to restore."
+
+hip_flexor_reset:
+  primary: [psoas, iliacus]
+  secondary: [rectus femoris, glutes]
+  feel: "a stretch across the front of the hip on your back leg"
+  not_feel: "your lower back arching — tuck your tailbone first"
+  why: "Hip flexors sit in a shortened position every hour you are in a chair."
+
+standing_forward_fold:
+  primary: [hamstrings, spinal erectors]
+  secondary: [calves]
+  feel: "a long release down the back of your legs and spine"
+  not_feel: "a sharp pull behind the knees — bend them more"
+  why: "Decompresses the spine and lets the whole back line lengthen after hours of loading."
+
+hip_circles:
+  primary: [hip rotators, glute medius]
+  secondary: [obliques]
+  feel: "the joint moving freely where your leg meets your pelvis"
+  not_feel: "your knees doing the circling"
+  why: "Hips are ball joints. Sitting uses about a tenth of what they can do."
+
+squat:
+  primary: [quadriceps, glutes]
+  secondary: [hamstrings, spinal erectors, calves]
+  feel: "your thighs and glutes taking the load as you sit back"
+  not_feel: "your knees taking it — sit back, don't drop straight down"
+  why: "The most direct way to wake up the biggest muscles a chair switches off."
+
+calf_raise:
+  primary: [gastrocnemius, soleus]
+  secondary: [tibialis posterior]
+  feel: "your calves shortening at the top, lengthening slowly on the way down"
+  not_feel: "your toes gripping the floor"
+  why: "Calves pump blood back up your legs. Hours of stillness is why your feet feel heavy."
+
+glute_squeeze:
+  primary: [gluteus maximus]
+  secondary: [hamstrings]
+  feel: "both glutes contracting evenly underneath you"
+  not_feel: "your lower back or abs tightening instead"
+  why: "Glutes are the muscle most reliably switched off by sitting on them all day."
+
+figure_four:
+  primary: [piriformis, gluteus medius]
+  secondary: [hip rotators]
+  feel: "a deep stretch in the back of the crossed hip"
+  not_feel: "pressure inside the crossed knee"
+  why: "Targets the deep hip rotators that get stiff from sitting, especially with legs crossed."
+
+chair_squat:
+  primary: [glutes, quadriceps]
+  secondary: [spinal erectors, hamstrings]
+  feel: "your glutes driving you up out of the chair"
+  not_feel: "your momentum doing it — stand up slowly enough that the muscle has to work"
+  why: "Sit-to-stand is the single most functional movement you lose by sitting all day."
+
+hip_hinge:
+  primary: [glutes, hamstrings]
+  secondary: [spinal erectors]
+  feel: "your hips travelling backward and your hamstrings taking tension"
+  not_feel: "your spine rounding — the movement is at the hip, not the back"
+  why: "Teaches your body to bend from the hips, which is how you protect your back for life."
+
+lunge:
+  primary: [quadriceps, glutes]
+  secondary: [hamstrings, calves, hip stabilisers]
+  feel: "the front thigh and glute working, and the back hip stretching open"
+  not_feel: "your front knee under pressure — keep your weight in the heel"
+  why: "One leg at a time exposes the side that has quietly gotten weaker."
+
+wrist_stretch:
+  primary: [wrist flexors, wrist extensors]
+  secondary: [forearm muscles]
+  feel: "a stretch along the inside or outside of your forearm"
+  not_feel: "tingling in your fingers — back off if you do"
+  why: "Typing holds your wrists in one position for hours; the forearms shorten around it."
+
+wrist_prayer:
+  primary: [wrist flexors]
+  secondary: [forearm muscles]
+  feel: "an even stretch across both inner forearms"
+  not_feel: "one wrist taking more than the other"
+  why: "Balances out the hand that spends all day on a mouse."
+
+finger_fan:
+  primary: [hand intrinsics, finger extensors]
+  secondary: [forearm muscles]
+  feel: "your fingers spreading fully, then closing fully"
+  not_feel: "cramping — slow down and go smaller"
+  why: "Your hands only ever half-close on a keyboard. This restores the full range."
+
+eye_horizon:
+  primary: [ciliary muscle]
+  secondary: [extraocular muscles]
+  feel: "your eyes softening as they let go of near focus"
+  not_feel: "any squinting — let the distance be blurry if it wants to be"
+  why: "The focusing muscle inside your eye holds a contraction for every hour you look at a screen."
+
+eye_palming:
+  primary: [extraocular muscles]
+  secondary: [ciliary muscle]
+  feel: "warmth and complete darkness letting your eyes rest"
+  not_feel: "pressure on the eyeballs — the palms rest on the bone around them"
+  why: "Darkness is the only real rest your eyes get during a screen day."
+
+eye_figure_eight:
+  primary: [extraocular muscles]
+  secondary: []
+  feel: "your eyes travelling smoothly to the edges of their range"
+  not_feel: "your head moving instead of your eyes"
+  why: "A screen keeps your gaze in a small box. This uses the whole range."
+
+box_breath:
+  primary: [diaphragm]
+  secondary: [intercostals]
+  feel: "your lower ribs widening on the way in, softening on the way out"
+  not_feel: "your shoulders rising — that's shallow chest breathing"
+  why: "Slow exhales settle the nervous system, which is what closes out a reset."

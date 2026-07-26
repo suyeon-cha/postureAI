@@ -854,6 +854,7 @@ function viewSession() {
         <div class="stack-sm">
           <div class="move-name" id="moveName">Getting ready…</div>
           <p class="move-cue" id="moveCue"></p>
+          <p class="move-muscles" id="moveMuscles" hidden></p>
         </div>
         <div class="row">
           <button class="btn secondary" id="pause">Pause</button>
@@ -928,6 +929,15 @@ function paintSession() {
   if (nameEl) nameEl.textContent = lib?.[live.move]?.name || String(live.move || "").replace(/_/g, " ");
   const cueEl = $("#moveCue");
   if (cueEl) cueEl.textContent = lib?.[live.move]?.cues?.during || "";
+
+  // Naming the muscle while it works is the mind-muscle mechanism, so this
+  // stays on screen for the whole move rather than flashing with the cue.
+  const muscleEl = $("#moveMuscles");
+  if (muscleEl) {
+    const m = live.target_muscles || [];
+    muscleEl.textContent = m.length ? `Targeting: ${m.join(" · ")}` : "";
+    muscleEl.hidden = !m.length;
+  }
 
   const steps = $("#steps");
   if (steps) {

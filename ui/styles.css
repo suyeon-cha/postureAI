@@ -415,6 +415,10 @@ textarea::placeholder { color: var(--ink-3); }
 }
 .move-name { font-size: 1.22rem; font-weight: 580; }
 .move-cue { color: var(--ink-2); max-width: 40ch; }
+.move-muscles {
+  color: var(--ink-3, var(--ink-2)); font-size: 13px; letter-spacing: .02em;
+  margin-top: 6px; text-transform: lowercase;
+}
 
 .cue-banner {
   background: var(--accent-soft); color: var(--accent-ink);

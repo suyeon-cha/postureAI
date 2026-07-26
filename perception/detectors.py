@@ -26,6 +26,11 @@ VISIBILITY_MIN = 0.5
 FAULT_PERSIST_FRAMES = 5
 SMOOTH_WINDOW = 5
 
+# When the one mind-muscle cue lands: after this rep on rep-counted moves,
+# after this many seconds of stillness on holds.
+MIND_MUSCLE_REP = 2
+MIND_MUSCLE_HOLD_S = 4.0
+
 # typing.List, not list[...]: aliases are evaluated at runtime regardless of the
 # __future__ import, and builtin generics need 3.9+.
 Keypoints = List[List[float]]
@@ -241,6 +246,11 @@ class MoveTracker:
         self._fault_counts: dict[str, int] = {}
         self.recent_faults: deque[str] = deque(maxlen=3)
         self._vlm_asked_at = 0.0
+        # Mind-muscle cue: fired once per move, at the moment attention is
+        # actually free — after the rhythm is found on reps, or once the body
+        # has settled into a hold. Any earlier and it competes with the setup
+        # instruction; any later and the move is over.
+        self._mind_muscle_sent = False
 
     # ── signals ──
 
@@ -401,6 +411,16 @@ class MoveTracker:
                             "type": "form_fault", "move": self.move,
                             "detail": "too_fast", "value": 0, "frame_jpeg_b64": None,
                         })
+                    # Rhythm is established by rep 2 and there are reps left to
+                    # apply the cue to. Skip it if a fault just fired — one
+                    # thing at a time is the whole coaching philosophy.
+                    if (
+                        self.rep == MIND_MUSCLE_REP
+                        and self.rep < self.target_reps
+                        and not events
+                    ):
+                        if cue := self._mind_muscle():
+                            events.append(cue)
                     if self.rep >= self.target_reps:
                         events.append(self._complete())
 
@@ -412,6 +432,10 @@ class MoveTracker:
             if in_position:
                 self._hold_since = self._hold_since or now
                 self.hold_elapsed = now - self._hold_since
+                # Settled into the stretch — now they can feel where it lands.
+                if self.hold_elapsed >= MIND_MUSCLE_HOLD_S and not events:
+                    if cue := self._mind_muscle():
+                        events.append(cue)
             else:
                 self._hold_since = None
                 self.hold_elapsed = 0.0
@@ -440,6 +464,16 @@ class MoveTracker:
                 events.append(self._complete())
 
         return events
+
+    def _mind_muscle(self) -> dict[str, Any] | None:
+        """Fire the one attention cue for this move, if it hasn't gone yet."""
+        if self._mind_muscle_sent:
+            return None
+        self._mind_muscle_sent = True
+        return {
+            "type": "mind_muscle", "move": self.move, "detail": None,
+            "value": 0, "frame_jpeg_b64": None,
+        }
 
     def _complete(self) -> dict[str, Any]:
         return {
@@ -476,6 +510,7 @@ class MoveTracker:
 
     def session_state(self) -> dict[str, Any]:
         """The `session` block of contracts.md §1."""
+        muscles = self.spec.get("muscles") or {}
         return {
             "move": self.move,
             "rep": self.rep,
@@ -483,6 +518,9 @@ class MoveTracker:
             "hold_seconds": round(self.hold_elapsed, 1),
             "form": "fault" if self.recent_faults else "ok",
             "tempo": self.pace(),
+            # (v1.2) shown for the whole move, not just at the cue moment —
+            # naming the muscle while you feel it is the entire mechanism.
+            "target_muscles": list(muscles.get("primary") or []),
         }
 
     def metrics(self) -> dict[str, Any]:
