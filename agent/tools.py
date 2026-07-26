@@ -1,6 +1,6 @@
 """The FlowReset tool surface.
 
-Six tools, exactly the set named in the brief. Small on purpose: the judges
+Seven tools, kept small on purpose so the judges
 need to *see* the loop (understand → reason → call tools → act), and a wide
 surface makes the trace unreadable.
 
@@ -14,7 +14,7 @@ from __future__ import annotations
 import time
 from typing import Any, Callable
 
-from . import memory, routines
+from . import knowledge, memory, routines
 
 # Populated by server/main.py so analyze_pose can read the live perception
 # state without the agent importing the camera lane (keeps lanes decoupled).
@@ -76,8 +76,14 @@ def select_approved_routine(
         "move_names": [m["name"] for m in plan["detail"]],
         "needs_full_body": plan["needs_full_body"],
         "camera_useful": plan["camera_useful"],
+        "knowledge": knowledge.topic(plan["symptom"]),
         "avoided": hist.get("moves_to_avoid", []),
     }
+
+
+def retrieve_wellness_guidance(area: str = "general") -> dict[str, Any]:
+    """Retrieve approved rationale, camera checks, limitations, and sources."""
+    return knowledge.topic(area)
 
 
 def analyze_pose(move: str | None = None) -> dict[str, Any]:
@@ -167,6 +173,7 @@ REGISTRY: dict[str, Callable[..., Any]] = {
     "get_user_context": get_user_context,
     "get_reset_history": get_reset_history,
     "select_approved_routine": select_approved_routine,
+    "retrieve_wellness_guidance": retrieve_wellness_guidance,
     "analyze_pose": analyze_pose,
     "generate_coaching_cue": generate_coaching_cue,
     "record_session_result": record_session_result,
@@ -221,6 +228,7 @@ SCHEMAS: list[dict[str, Any]] = [
                         "enum": [
                             "neck_shoulders",
                             "back_hips",
+                            "legs_glutes",
                             "wrists_hands",
                             "tired_eyes",
                             "general",
@@ -234,6 +242,34 @@ SCHEMAS: list[dict[str, Any]] = [
                     "intensity": {"type": "string", "enum": ["gentle", "moderate"]},
                 },
                 "required": ["symptom", "duration_min"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "retrieve_wellness_guidance",
+            "description": (
+                "Retrieve approved rationale, camera checks, limitations, and "
+                "authoritative sources for a workplace-wellness area. Use this "
+                "instead of inventing health explanations."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "area": {
+                        "type": "string",
+                        "enum": [
+                            "neck_shoulders",
+                            "back_hips",
+                            "legs_glutes",
+                            "wrists_hands",
+                            "tired_eyes",
+                            "general",
+                        ],
+                    }
+                },
+                "required": ["area"],
             },
         },
     },

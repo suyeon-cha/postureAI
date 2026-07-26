@@ -21,7 +21,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from agent import coach as coach_mod
-from agent import llm, memory, routines, tools
+from agent import knowledge, llm, memory, routines, tools
 from perception import debt as debt_mod
 from perception import detectors, pose
 
@@ -173,7 +173,7 @@ async def agent_loop() -> None:
             if event["type"] == "vlm_check_needed":
                 frame = frame_sink.take_frame_for_vlm()
                 if frame:
-                    await asyncio.to_thread(_vlm_check, event, frame)
+                    await _vlm_check(event, frame)
                 continue
 
             message = await asyncio.to_thread(agent.on_event, event)
@@ -183,18 +183,35 @@ async def agent_loop() -> None:
             await broadcast.send({"type": "error", "where": "agent_loop", "detail": str(exc)})
 
 
-def _vlm_check(event: dict[str, Any], frame_b64: str) -> None:
-    """Local vision judge. Runs off the event loop; result arrives as a cue."""
+async def _vlm_check(event: dict[str, Any], frame_b64: str) -> None:
+    """Run a bounded local vision check and publish a conservative UI cue."""
     move = event.get("move") or ""
     try:
         spec = routines.describe_move(move)
     except routines.NoApprovedRoutine:
         return
-    verdict = llm.look_at_frame(
-        frame_b64, f"The person is doing: {spec['name']}. Is the movement being done well?"
+    verdict = await asyncio.to_thread(
+        llm.look_at_frame,
+        frame_b64,
+        (
+            f"The person is doing: {spec['name']}. Only assess whether the relevant "
+            "body area is visible and the movement appears slow and controlled. "
+            "Do not diagnose or make a medical claim."
+        ),
     )
     agent._emit({"kind": "tool", "name": "look_at_frame",
                  "arguments": {"move": move}, "result": {"verdict": verdict}})
+    lowered = verdict.lower()
+    if any(word in lowered for word in ("unclear", "cannot", "can't see", "not visible")):
+        cue = "Video AI needs a clearer view. Reframe the relevant body area, or continue by timer."
+        status = "reframe"
+    elif any(word in lowered for word in ("fast", "rushed", "not controlled")):
+        cue = "Video AI check: slow the movement down and stay within a comfortable range."
+        status = "adjust"
+    else:
+        cue = "Video AI check complete: movement is visible. Continue slowly and comfortably."
+        status = "ready"
+    await broadcast.send({"type": "video_ai", "status": status, "text": cue, "move": move})
 
 
 async def _emit_coach(message: dict[str, Any]) -> None:
@@ -290,9 +307,16 @@ async def _handle_ui_message(msg: dict[str, Any]) -> None:
                 can_stand=bool(msg.get("can_stand", True)),
             )
             agent.plan = plan
+        if agent.session_id is None:
             agent.session_id = memory.start_session(
                 plan["symptom"], plan["duration_min"], plan["moves"]
             )
+            agent._emit({
+                "kind": "action",
+                "action": "session_started",
+                "session_id": agent.session_id,
+                "moves": plan["moves"],
+            })
         session.start(plan, camera_on=bool(msg.get("camera", False)))
         await broadcast.send({"type": "session_started", "plan": plan,
                               "camera_on": session.camera_on})
@@ -408,6 +432,12 @@ async def library() -> JSONResponse:
         "symptoms": routines.SYMPTOM_LABELS,
         "durations": routines.DURATION_CHOICES_MIN,
     })
+
+
+@app.get("/api/knowledge")
+async def knowledge_catalog() -> JSONResponse:
+    """Approved employee-wellness content; contains no employee data."""
+    return JSONResponse(knowledge.catalog())
 
 
 @app.get("/api/trace")

@@ -316,7 +316,7 @@ lunge:
 wrist_stretch:
   name: "Wrist extensor stretch"
   targets: [wrists]
-  detection: timer_only
+  detection: vlm_judge
   hold_seconds: 20
   sides: 2
   seconds: 45
@@ -330,7 +330,7 @@ wrist_stretch:
 wrist_prayer:
   name: "Prayer stretch"
   targets: [wrists]
-  detection: timer_only
+  detection: vlm_judge
   hold_seconds: 20
   seconds: 30
   seated_ok: true
@@ -343,7 +343,7 @@ wrist_prayer:
 finger_fan:
   name: "Finger fan and fist"
   targets: [wrists]
-  detection: timer_only
+  detection: vlm_judge
   hold_seconds: 20
   seconds: 25
   seated_ok: true
@@ -358,7 +358,7 @@ finger_fan:
 eye_horizon:
   name: "Distance gaze"
   targets: [eyes]
-  detection: timer_only
+  detection: vlm_judge
   hold_seconds: 20
   seconds: 25
   seated_ok: true
@@ -371,7 +371,7 @@ eye_horizon:
 eye_palming:
   name: "Palming"
   targets: [eyes]
-  detection: timer_only
+  detection: vlm_judge
   hold_seconds: 25
   seconds: 30
   seated_ok: true
@@ -384,7 +384,7 @@ eye_palming:
 eye_figure_eight:
   name: "Slow figure eight"
   targets: [eyes]
-  detection: timer_only
+  detection: vlm_judge
   hold_seconds: 20
   seconds: 25
   seated_ok: true

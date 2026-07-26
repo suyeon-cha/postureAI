@@ -31,6 +31,7 @@ Dell Pro Max with GB10 ───────────────────
   perception/  MediaPipe pose → joint angles, reps, holds, tempo, posture debt
        │ events (contracts.md §2)
   agent/       FlowReset agent: intake → tools → approved routine → cues → memory
+       │       approved knowledge: rationale → camera checks → sources → limitations
        │       reasoning + language: Qwen via local Ollama
        │       form judge (rare, one frame): qwen2.5vl via local Ollama
   server/      FastAPI, WebSocket at /ws, Piper TTS, Whisper STT, SQLite, serves ui/
@@ -41,6 +42,12 @@ All inference is local: **`qwen3:8b`** (agent reasoning and coach language) and
 faster-whisper STT. `agent/llm.py` refuses any non-loopback/non-private inference endpoint at
 import time — a stray cloud URL crashes the app instead of quietly working.
 
+The agent retrieves source-grounded guidance from `agent/knowledge.yaml`; employee
+history remains outside the shared content store. See
+[`FLOWRESET_KNOWLEDGE_BASE.md`](FLOWRESET_KNOWLEDGE_BASE.md) for the content and
+privacy contract and [`FEATURE_STATUS.md`](FEATURE_STATUS.md) for the truthful
+implemented/missing feature matrix.
+
 ### The agent is ours; the framework is not the agent
 
 `agent/runtime.py` is an adapter with one interface: `run(messages, tools, on_step)`.
@@ -50,14 +57,15 @@ import time — a stray cloud URL crashes the app instead of quietly working.
   `FLOWRESET_RUNTIME=nemoclaw` on the box and nothing else in the app changes.
 
 Everything that makes FlowReset a product — system instructions and coach styles, the intake
-state machine, the six tool definitions and implementations, the approved-routine policy,
+state machine, the seven tool definitions and implementations, the approved-routine policy,
 pose-metrics-to-cue logic, the memory schema, the safety guardrails, and the agent trace —
 lives in `agent/` and `perception/` and was written here.
 
-### The six tools
+### The seven tools
 
-`get_user_context` · `get_reset_history` · `select_approved_routine` · `analyze_pose` ·
-`generate_coaching_cue` · `record_session_result`
+`get_user_context` · `get_reset_history` · `retrieve_wellness_guidance` ·
+`select_approved_routine` · `analyze_pose` · `generate_coaching_cue` ·
+`record_session_result`
 
 Two guardrails matter more than the rest:
 
@@ -180,7 +188,7 @@ no model is running, so a shared preview can't be mistaken for local inference.
 | Folder | Lane | Contents |
 |---|---|---|
 | `perception/` | 1 | `pose.py` MediaPipe + frame sink · `detectors.py` angles, reps, holds, form faults · `debt.py` watch-mode accumulator |
-| `agent/` | 2 | `coach.py` the agent · `runtime.py` stack adapter · `tools.py` the six tools · `routines.py` composer · `persona.py` prompts + claim filter · `memory.py` SQLite · `llm.py` local Qwen client · `exercises.yaml` library |
+| `agent/` | 2 | `coach.py` the agent · `runtime.py` stack adapter · `tools.py` the seven tools · `knowledge.py` approved local retrieval · `routines.py` composer · `persona.py` prompts + claim filter · `memory.py` SQLite · `llm.py` local Qwen client · YAML content libraries |
 | `ui/` | 3 | `app.js` screens · `charts.js` · `overlay.js` skeleton · `mock.js` offline stand-in · no build step |
 | `server/` | 4 | `main.py` FastAPI + `/ws` · `bus.py` broadcast + queue · `tts.py` Piper · `stt.py` Whisper · `seed.py` demo history |
 
