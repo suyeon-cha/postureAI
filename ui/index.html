@@ -24,9 +24,14 @@
 
           <nav class="nav" id="nav" aria-label="Main"></nav>
 
-          <div class="status" id="localBadge" title="Where inference runs">
-            <span class="dot" data-state="pending"></span>
-            <span class="status-text">Checking local AI…</span>
+          <div class="topbar-actions">
+            <button class="settings-shortcut" id="settingsShortcut" type="button" aria-label="Open settings">
+              Settings
+            </button>
+            <div class="status" id="localBadge" title="Where inference runs">
+              <span class="dot" data-state="pending"></span>
+              <span class="status-text">Checking local AI…</span>
+            </div>
           </div>
         </div>
       </header>
@@ -37,23 +42,12 @@
         <div class="inner">
           <div>
             <strong>FlowReset</strong>
-            A private wellbeing agent for desk workers. Runs entirely on the
-            Dell Pro Max with GB10 — no external AI API, no video leaving the machine.
-          </div>
-          <div>
-            <strong>Where the AI runs</strong>
-            Language and vision models, agent reasoning, memory, and voice all
-            execute locally. The browser captures and displays only.
-          </div>
-          <div>
-            <strong>Not medical care</strong>
-            FlowReset offers movement breaks and form awareness. It does not
-            diagnose or treat anything.
+            Private, camera-optional resets for desk workers. AI inference, memory,
+            and voice run locally on the Dell Pro Max with GB10.
           </div>
           <p class="legal">
-            For pain that is severe, persistent, or worsening — or numbness, weakness,
-            or changes in vision — please talk to a qualified healthcare professional.
-            Built for the Dell × NVIDIA Local AI Hackathon.
+            General wellness, not medical care. Stop if a movement causes or worsens pain.
+            No external AI API · No stored video · Built for the Dell × NVIDIA Local AI Hackathon.
           </p>
         </div>
       </footer>

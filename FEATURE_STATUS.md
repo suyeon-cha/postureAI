@@ -1,7 +1,7 @@
 # FlowReset Feature and Demo Status
 
 Updated July 26, 2026. This is the truthful scope of the
-`feat/flowreset-app` branch.
+current unified application branch.
 
 ## Golden user flow
 
@@ -25,7 +25,9 @@ Updated July 26, 2026. This is the truthful scope of the
 
 | Capability | Status | Implementation |
 |---|---|---|
-| English onboarding and settings | Working | Goal, common areas, standing, duration, tone, voice, privacy |
+| English onboarding and settings | Working | Goal, common areas, duration, local voice concern; standing is per session, tone/privacy stay in Settings |
+| Simplified desktop information architecture | Working | Three primary destinations: Reset, Progress, Workspace; Settings is secondary |
+| Per-session readiness guidance | Working | Space, camera choice, and comfort checks appear before every guided reset |
 | Plain-language and card check-in | Working | Deterministic parsing plus local agent |
 | Safety escalation | Working | Red-flag gate before routine selection |
 | Approved exercise composition | Working | `agent/exercises.yaml`; model cannot invent executed movements |

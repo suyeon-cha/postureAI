@@ -119,8 +119,17 @@ button { font: inherit; cursor: pointer; }
 .nav button[aria-current="page"] { background: var(--accent-soft); color: var(--accent-ink); font-weight: 570; }
 .nav button:disabled { opacity: 0.42; cursor: not-allowed; background: transparent; }
 
+.topbar-actions { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.settings-shortcut {
+  border: 0; background: transparent; color: var(--ink-2);
+  padding: 7px 12px; border-radius: 999px; font-size: 0.86rem;
+}
+.settings-shortcut:hover,
+.settings-shortcut[aria-current="page"] { background: var(--surface-2); color: var(--ink); }
+.settings-shortcut:disabled { opacity: 0.42; cursor: not-allowed; }
+
 .status {
-  margin-left: auto; display: flex; align-items: center; gap: 8px;
+  display: flex; align-items: center; gap: 8px;
   font-size: 0.8rem; color: var(--ink-2);
   background: var(--surface-2); border: 1px solid var(--line);
   padding: 6px 13px; border-radius: 999px; white-space: nowrap;
@@ -291,6 +300,13 @@ textarea::placeholder { color: var(--ink-3); }
   font-size: 0.76rem; font-weight: 660; letter-spacing: 0.06em; color: var(--accent);
 }
 
+.welcome-trust {
+  display: flex; gap: 12px 24px; flex-wrap: wrap;
+  padding: 16px 18px; color: var(--ink-2);
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm);
+  font-size: 0.84rem;
+}
+
 .cta-band { display: flex; gap: 24px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
 
 .privacy-list { display: grid; gap: 14px; padding: 0; margin: 0; list-style: none; }
@@ -425,6 +441,26 @@ textarea::placeholder { color: var(--ink-3); }
 }
 .check-grid i { color: var(--green); font-style: normal; font-weight: 700; }
 @media (max-width: 680px) { .check-grid { grid-template-columns: 1fr; } }
+
+.session-guide {
+  display: grid; gap: 16px; padding: 20px;
+  border: 1px solid var(--line); background: var(--surface-2);
+  border-radius: var(--radius-sm);
+}
+.ready-list {
+  list-style: none; padding: 0; margin: 0;
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px;
+}
+.ready-list li {
+  display: grid; gap: 4px; padding: 13px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 9px;
+}
+.ready-list li::before { content: "✓"; color: var(--green); font-weight: 700; }
+.ready-list span { color: var(--ink-2); font-size: 0.8rem; }
+.camera-details { border-top: 1px solid var(--line); padding-top: 11px; }
+.camera-details summary { cursor: pointer; font-size: 0.86rem; font-weight: 570; }
+.camera-details p { margin-top: 8px; }
+@media (max-width: 760px) { .ready-list { grid-template-columns: 1fr; } }
 
 /* guided session */
 

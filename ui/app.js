@@ -48,13 +48,9 @@ const FORCE_PREVIEW =
   new URLSearchParams(location.search).has("preview") || window.__FLOWRESET_PREVIEW === true;
 
 const NAV = [
-  { key: "welcome", label: "Overview" },
-  { key: "home", label: "New reset" },
-  { key: "dashboard", label: "My progress" },
-  { key: "knowledge", label: "Wellness library" },
-  { key: "workspace", label: "Team insights" },
-  { key: "settings", label: "Settings" },
-  { key: "help", label: "Help" },
+  { key: "home", label: "Reset" },
+  { key: "dashboard", label: "Progress" },
+  { key: "workspace", label: "Workspace" },
 ];
 
 // ─────────────────────────────── state ───────────────────────────────
@@ -297,20 +293,27 @@ function renderNav() {
     if (S.screen === "session") return;
     go(S.onboarded ? "home" : "welcome");
   });
+  $("#settingsShortcut").addEventListener("click", () => {
+    if (S.screen !== "session" && S.onboarded) go("settings");
+  });
   markNav();
 }
 
 function markNav() {
-  // The site nav is always available — it's a website, not a wizard. Before
-  // onboarding, only the pages that make sense without preferences show.
-  const open = S.onboarded ? NAV.map((n) => n.key) : ["welcome", "knowledge", "workspace", "help"];
+  const open = S.onboarded ? NAV.map((n) => n.key) : [];
+  const active = ["plan", "session", "complete", "escalate"].includes(S.screen) ? "home" : S.screen;
   [...$("#nav").children].forEach((b, i) => {
     const key = NAV[i].key;
     b.hidden = !open.includes(key);
     b.disabled = S.screen === "session";
-    if (key === S.screen) b.setAttribute("aria-current", "page");
+    if (key === active) b.setAttribute("aria-current", "page");
     else b.removeAttribute("aria-current");
   });
+  const settings = $("#settingsShortcut");
+  settings.hidden = !S.onboarded;
+  settings.disabled = S.screen === "session";
+  if (S.screen === "settings") settings.setAttribute("aria-current", "page");
+  else settings.removeAttribute("aria-current");
 }
 
 function renderBadge() {
@@ -344,10 +347,8 @@ function renderBadge() {
    box. The status badge alone is too easy to miss. */
 function showPreviewNotice() {
   const strip = el(`<div class="preview-strip" role="status">
-    <strong>Interface preview.</strong> Every screen and interaction here is real, but
-    no model is running: routines, cues, and history come from a local stand-in
-    (<code>ui/mock.js</code>), and the camera and voice features need the box. On the
-    Dell Pro Max with GB10, Qwen and MediaPipe replace the stand-in with no UI changes.
+    <strong>Interactive preview.</strong> Sample data is active; camera, voice, and AI
+    inference connect when this interface runs on the GB10.
   </div>`);
   document.querySelector(".topbar").after(strip);
 }
@@ -441,27 +442,26 @@ function render() {
   app.focus({ preventScroll: true });
 }
 
-/* The landing page. A website home, not an app splash: hero, what it is,
-   how it works, the privacy argument, then a call to action. */
+/* Fast first-run orientation. Deeper product detail stays contextual in the
+   reset flow instead of turning the application into a marketing site. */
 function viewWelcome() {
   const wrap = el(`<div>
     <section class="hero">
       <div class="stack">
-        <span class="eyebrow">Private wellbeing agent · runs on your machine</span>
-        <h1>Feel better at your desk in under two minutes.</h1>
-        <p class="lede">Choose what feels uncomfortable. FlowReset builds a short reset,
-          coaches your movement with optional camera feedback, and learns what helps—all
-          privately on the Dell Pro Max with GB10.</p>
+        <span class="eyebrow">Private desk-wellness coach · local on GB10</span>
+        <h1>Your next useful break starts here.</h1>
+        <p class="lede">Tell FlowReset what needs attention and how much time you have.
+          Get a short guided reset, optional camera feedback, and progress you can see.</p>
         <div class="row">
-          <button class="btn" id="start">Start my first reset</button>
-          <button class="btn subtle" id="skipOnboard">Try without setup</button>
+          <button class="btn" id="start">Set up in 30 seconds</button>
+          <button class="btn secondary" id="skipOnboard">Start a reset now</button>
         </div>
-        <p class="tiny muted">About 30 seconds to set up · No account · Camera off by default</p>
+        <p class="tiny muted">No account · Camera optional · Video never stored</p>
       </div>
 
       <div class="hero-art" aria-hidden="true">
         <div class="mock">
-          <div class="mock-row"><span class="tag">Agent plan</span></div>
+          <div class="mock-row"><span class="tag">Guided reset</span></div>
           <div class="mock-row">
             <span class="mock-ring"><i>0:45</i></span>
             <div class="stack-sm" style="flex:1">
@@ -476,7 +476,7 @@ function viewWelcome() {
       </div>
     </section>
 
-    <section class="band sunk" style="border-radius:20px">
+    <section class="band sunk" style="border-radius:20px" hidden>
       <div class="section stack">
         <div class="stack-sm measure">
           <h2>The problem isn't awareness.</h2>
@@ -499,22 +499,25 @@ function viewWelcome() {
 
     <section class="section stack">
       <div class="stack-sm measure">
-        <h2>From discomfort to a useful break</h2>
-        <p class="muted">Three clear steps, with no routine hunting.</p>
+        <h2>One clear workflow</h2>
+        <p class="muted">Check in, follow one instruction at a time, then see what helps.</p>
       </div>
       <div class="grid cols-3 steps-flow">
-        <div class="step"><strong>Check in</strong>
-          <p class="small muted">Pick an area, your available time, and whether you can stand.</p></div>
-        <div class="step"><strong>Follow your reset</strong>
-          <p class="small muted">Countdown, one instruction at a time, and — only if you turn the
-            camera on — rep counting and a single form cue.</p></div>
-        <div class="step"><strong>Teach the agent</strong>
-          <p class="small muted">Tell it whether you feel better, the same, or worse so the next
-            recommendation improves.</p></div>
+        <div class="step"><strong>Quick check-in</strong>
+          <p class="small muted">Choose an area, available time, and seated or standing.</p></div>
+        <div class="step"><strong>Guided reset</strong>
+          <p class="small muted">Review a safe setup, then follow the timer and one coaching cue.</p></div>
+        <div class="step"><strong>Visible progress</strong>
+          <p class="small muted">Rate the result and track consistency, outcomes, and body-area patterns.</p></div>
+      </div>
+      <div class="welcome-trust">
+        <span>✓ All AI runs locally on the GB10</span>
+        <span>✓ Camera is optional for every session</span>
+        <span>✓ General wellness—not medical care</span>
       </div>
     </section>
 
-    <section class="band sunk" style="border-radius:20px">
+    <section class="band sunk" style="border-radius:20px" hidden>
       <div class="section">
         <div class="dash-grid">
           <div class="stack">
@@ -558,7 +561,7 @@ function viewWelcome() {
       </div>
     </section>
 
-    <section class="section">
+    <section class="section" hidden>
       <div class="card cta-band">
         <div class="stack-sm">
           <h2>Ready when you are.</h2>
@@ -619,14 +622,10 @@ function viewPrefs() {
     <div class="card stack">
       <div class="stack-sm"><h3>Where do you usually feel it?</h3>
         <div class="row" id="areas"></div></div>
-      <div class="stack-sm"><h3>Can you usually stand up?</h3>
-        <div class="row" id="stand"></div></div>
       <div class="stack-sm"><h3>Preferred session length</h3>
         <div class="row" id="dur"></div>
         <p class="tiny muted">One minute between meetings, ten at the end of the day —
           the agent scales the routine to whatever you pick.</p></div>
-      <div class="stack-sm"><h3>Coach style</h3>
-        <div class="grid option-grid" id="style"></div></div>
 
       <div class="stack-sm">
         <h3>Anything else you'd like FlowReset to know?</h3>
@@ -657,16 +656,6 @@ function viewPrefs() {
     $("#areas", wrap).append(b);
   });
 
-  [["Yes", true], ["I'm usually seated", false]].forEach(([label, val]) => {
-    const b = el(`<button class="chip" type="button" aria-pressed="${S.prefs.can_stand === val}">${label}</button>`);
-    b.addEventListener("click", () => {
-      S.prefs.can_stand = val;
-      [...$("#stand", wrap).children].forEach((c) => c.setAttribute("aria-pressed", "false"));
-      b.setAttribute("aria-pressed", "true");
-    });
-    $("#stand", wrap).append(b);
-  });
-
   [1, 2, 3, 5, 10].forEach((m) => {
     const b = el(`<button class="chip" type="button" aria-pressed="${S.prefs.preferred_duration_min === m}">${m} min</button>`);
     b.addEventListener("click", () => {
@@ -675,17 +664,6 @@ function viewPrefs() {
       b.setAttribute("aria-pressed", "true");
     });
     $("#dur", wrap).append(b);
-  });
-
-  STYLES.forEach((s) => {
-    const b = el(`<button class="option" type="button" aria-pressed="${S.prefs.coach_style === s.key}">
-      <strong>${esc(s.label)}</strong><span class="small muted">${esc(s.hint)}</span></button>`);
-    b.addEventListener("click", () => {
-      S.prefs.coach_style = s.key;
-      [...$("#style", wrap).children].forEach((c) => c.setAttribute("aria-pressed", "false"));
-      b.setAttribute("aria-pressed", "true");
-    });
-    $("#style", wrap).append(b);
   });
 
   bindMic($("#mic", wrap), $("#concerns", wrap), $("#micStatus", wrap));
@@ -721,9 +699,9 @@ function viewHome() {
   const wrap = el(`<div class="stack">
     <div class="flow-heading">
       <div class="stack-sm">
-        <span class="eyebrow">New reset · about ${S.intake.duration_min} minutes</span>
-        <h1>What needs a reset right now?</h1>
-        <p class="muted">Choose an area, then adjust the plan constraints if needed.</p>
+        <span class="eyebrow">Reset · about ${S.intake.duration_min} minutes</span>
+        <h1>What needs attention right now?</h1>
+        <p class="muted">Two quick choices, then FlowReset builds the session.</p>
       </div>
       <div class="privacy-chip"><span>●</span> AI and camera processing stay local</div>
     </div>
@@ -732,7 +710,7 @@ function viewHome() {
       <div class="card stack">
         <div class="flow-step">
           <span class="step-number">1</span>
-          <div><h2>Choose an area</h2><p class="small muted">Select one. Nothing starts until you confirm.</p></div>
+          <div><h2>Check in</h2><p class="small muted">Choose an area or describe what you feel.</p></div>
         </div>
         <div class="grid symptom-grid" id="cards"></div>
         <div class="or"><span>or describe it</span></div>
@@ -748,7 +726,7 @@ function viewHome() {
       <aside class="card reset-options stack">
         <div class="flow-step">
           <span class="step-number">2</span>
-          <div><h2>Set your constraints</h2><p class="small muted">We prefilled your preferences.</p></div>
+          <div><h2>Fit it to your day</h2><p class="small muted">Confirm time and movement options.</p></div>
         </div>
         <div class="stack-sm">
           <span class="eyebrow">Available time</span>
@@ -762,14 +740,7 @@ function viewHome() {
         <button class="btn wide" id="ask">Build my reset</button>
         <button class="btn subtle wide" id="cancelPlan" hidden>Cancel</button>
         <p class="tiny muted" id="hint">The local agent uses your preferences and approved exercises.</p>
-        <p class="tiny muted">Keyboard shortcut: Ctrl/⌘ + Enter</p>
       </aside>
-    </div>
-
-    <div class="trust-row">
-      <span>✓ Camera is optional</span>
-      <span>✓ Frames are never stored</span>
-      <span>✓ General wellness—not medical care</span>
     </div>
 
     ${first ? `<div class="notice small">Your recent pattern: <strong>${esc(S.dashboard.symptom_labels?.[first] || first)}</strong>
@@ -890,37 +861,24 @@ function restorePlanControls() {
 function viewPlan() {
   const p = S.plan;
   const kb = p.knowledge || S.knowledge?.topics?.find((t) => t.area === p.symptom);
-  const camera = kb?.camera;
   const lib = mock ? mock.routines().moves : null;
   const name = (k) => lib?.[k]?.name || k.replace(/_/g, " ");
   const secs = (k) => lib?.[k]?.seconds || null;
 
   const wrap = el(`<div class="stack">
-    <div class="row"><span class="pill info">Agent plan</span>
-      <span class="pill">${esc(p.symptom_label)}</span>
+    <div class="row"><span class="pill info">Your reset</span>
       <span class="pill">${p.duration_min} min</span>
       <span class="pill">${p.moves.length} moves</span></div>
 
     <div class="card stack">
       <h1>${esc(p.symptom_label)} reset</h1>
-      <p class="hero-lede">${esc(S.coachText)}</p>
+      <p class="hero-lede">Your plan is ready. Review the sequence, then choose camera
+        coaching or timer-and-voice guidance.</p>
 
       <ol class="plan-moves">
         ${p.moves.map((k, i) => `<li><span>${esc(p.move_names?.[i] || name(k))}</span>
           ${secs(k) ? `<span class="dur">${secs(k)}s</span>` : ""}</li>`).join("")}
       </ol>
-
-      ${camera ? `<section class="video-ai-plan">
-        <div class="video-ai-head">
-          <div><span class="eyebrow">Video AI coach</span>
-            <h2>${esc(camera.mode)}</h2></div>
-          <span class="pill good">Runs locally</span>
-        </div>
-        <p class="small muted">${esc(camera.model)} checks:</p>
-        <div class="check-grid">${camera.checks.map((check) =>
-          `<span><i>✓</i>${esc(check)}</span>`).join("")}</div>
-        <p class="tiny muted">${esc(camera.limitation)}</p>
-      </section>` : ""}
 
       ${S.why.length ? `<details class="why">
         <summary><strong class="small">Why this reset?</strong>
@@ -933,17 +891,27 @@ function viewPlan() {
         <p class="tiny why-boundary">FlowReset provides general workplace-wellness guidance,
           not diagnosis or treatment. Content status: ${esc(kb?.review_status || "hackathon_general_wellness")}.</p></details>` : ""}
 
-      <div class="stack-sm">
-        <span class="eyebrow">Camera guidance</span>
-        <p class="small muted">${p.camera_useful
-          ? "Recommended for live feedback. Frames are analysed in memory on the GB10 and immediately discarded."
-          : "Optional for this routine. The camera can confirm participation while the timer guides you."}</p>
+      <section class="session-guide">
+        <div class="stack-sm">
+          <span class="eyebrow">Quick session setup</span>
+          <h2>Before you begin</h2>
+        </div>
+        <ol class="ready-list">
+          <li><strong>Make space.</strong><span>Keep a stable chair nearby and clear the floor.</span></li>
+          <li><strong>Choose guidance.</strong><span>Camera coaching is optional and processed locally; timer and voice always work.</span></li>
+          <li><strong>Stay comfortable.</strong><span>Use a comfortable range and stop if movement causes or worsens pain.</span></li>
+        </ol>
+        <details class="camera-details">
+          <summary>What the camera checks</summary>
+          <p class="small muted">${esc(kb?.camera?.checks?.join(" · ") || "Visibility, pace, and broad movement signals.")}</p>
+          <p class="tiny muted">${esc(kb?.camera?.limitation || "This is broad form awareness, not clinical assessment.")}</p>
+        </details>
         <div class="row">
-          <button class="btn" id="startCam">Start guided reset</button>
-          <button class="btn secondary" id="startNoCam">Continue without camera</button>
+          <button class="btn" id="startCam">Start with camera coaching</button>
+          <button class="btn secondary" id="startNoCam">Start without camera</button>
           <button class="btn subtle" id="back">Change request</button>
         </div>
-      </div>
+      </section>
     </div>
   </div>`);
 
@@ -1216,7 +1184,7 @@ function viewComplete() {
             <p class="small" style="color:var(--accent-ink);margin-top:6px">${esc(S.insight)}</p></div>` : ""}
           <div class="row">
             <button class="btn" id="toDash">See progress</button>
-            <button class="btn subtle" id="again">Back to home</button>
+            <button class="btn subtle" id="again">Start another reset</button>
           </div>
         </div>`));
         $("#toDash").addEventListener("click", () => go("dashboard"));

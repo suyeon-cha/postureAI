@@ -14,11 +14,11 @@ each principle satisfied.
 | 3 | User control and freedom | Back controls in onboarding; Change request before a session; cancellable planning; Pause, Skip move, End, and camera-off paths during a session | User can exit every multi-step flow without completing it |
 | 4 | Consistency and standards | Shared button hierarchy, chips, cards, headings, status colors, expandable details, navigation and focus behavior | Primary/secondary/destructive actions retain the same styling and wording |
 | 5 | Error prevention | Safe defaults, camera off until permission, approved-only exercise composer, deterministic safety gate, confirmation before history deletion, disabled navigation during an active session | High-cost errors are blocked before state changes |
-| 6 | Recognition rather than recall | Visible body-area choices, selected-state checkmark, constraint summary, complete movement list, camera checklist, contextual Why this?, persistent navigation | Users do not need to remember onboarding selections or instructions |
+| 6 | Recognition rather than recall | Visible body-area choices, selected-state checkmark, constraint summary, complete movement list, per-session readiness checklist, contextual Why this?, persistent navigation | Users do not need to remember onboarding selections or instructions |
 | 7 | Flexibility and efficiency | Skip setup, cards or natural language, local voice input, duration and movement options, keyboard shortcut, camera or timer-only modes, saved preferences | Novice and repeat-user paths both reach a reset |
-| 8 | Aesthetic and minimalist design | One primary action per stage, progressive disclosure for evidence, separate Wellness Library and Help, restrained status treatments | Primary flow avoids showing governance and technical detail until requested |
+| 8 | Aesthetic and minimalist design | Three primary destinations—Reset, Progress, Workspace—plus secondary Settings; one primary action per stage; knowledge and help appear only in context | Primary flow avoids separate feature silos and hides governance detail until requested |
 | 9 | Recognize, diagnose and recover from errors | Plain-language toast alerts, camera reframing instruction, local-AI timeout recovery, connection-loss notice, retry instructions, timer-only fallback | Errors state what happened and give a concrete next action |
-| 10 | Help and documentation | Help navigation with task-focused instructions; contextual camera guidance; Wellness Library; safety boundary; privacy explanation | Help is reachable before and after onboarding and is organized by user task |
+| 10 | Help and documentation | A short readiness checklist before every session, contextual camera recovery, expandable Why this?, safety boundary, and privacy explanation | Guidance appears at the moment of need without adding a separate primary Help destination |
 
 ## Critical regression scenarios
 
@@ -36,8 +36,8 @@ each principle satisfied.
    removed.
 8. Expand **Why this reset?** and verify source, limitation, review state, and
    safety boundary are visible.
-9. Navigate to Help before onboarding and reach a new reset, privacy settings,
-   and the wellness library.
+9. Complete first-run setup in two short steps, then verify that each generated
+   plan repeats the space, camera, and comfort checks before the session starts.
 10. Complete the entire flow with keyboard controls and visible focus.
 
 ## Remaining usability validation
