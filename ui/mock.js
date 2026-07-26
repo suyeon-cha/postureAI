@@ -144,9 +144,11 @@ export class MockBackend {
     if (min) duration = Math.max(1, Math.min(10, +min[1]));
     else if (sec) duration = Math.max(1, Math.round(+sec[1] / 60));
 
+    // Mirrors agent/coach.py::parse_intake — a stated ability beats an
+    // incidental mention of sitting, so ability is checked first.
     let canStand = this.prefs.can_stand;
-    if (/seated|sitting|stay in my (chair|seat)|can'?t stand|on a call|in a meeting/.test(lower)) canStand = false;
-    else if (/stand|get up|on my feet/.test(lower)) canStand = true;
+    if (/can stand|could stand|able to stand|can get up|happy to stand|standing is fine|standing's fine|on my feet|don'?t mind standing/.test(lower)) canStand = true;
+    else if (/stay seated|seated only|remain seated|stay in my (chair|seat)|stay at my desk|can'?t stand|cannot stand|can'?t get up|need to sit|have to sit|without standing|on a call|in a meeting|at my desk/.test(lower)) canStand = false;
 
     if (override?.symptom) symptom = override.symptom;
     if (override?.duration_min) duration = override.duration_min;

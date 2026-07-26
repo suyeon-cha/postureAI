@@ -159,8 +159,21 @@ backend when the WebSocket is unreachable. Lane 3 can build screens on any lapto
 python3 -m http.server 8777      # then open /ui/index.html
 ```
 
-**This is not the judging path.** When the mock is active the status badge reads
-*"Preview — no box attached"* rather than claiming local inference, on purpose.
+Add `?preview` to the URL to force the stand-in even when the box *is* reachable.
+
+There is also a single self-contained file — one HTML with the CSS and all modules
+inlined, no server and no network needed. Useful as a demo backup, for pitch
+screenshots, and for sending the interface to someone without a GB10:
+
+```bash
+python3 scripts/build-preview.py     # writes ui/preview.html (~104 KB)
+```
+
+`ui/preview.html` is generated — edit `ui/*.js` and rebuild, never the bundle.
+
+**None of this is the judging path.** When the stand-in is active the status badge
+reads *"Preview — no box attached"* and a banner under the header says plainly that
+no model is running, so a shared preview can't be mistaken for local inference.
 
 ## Repo layout & lanes
 

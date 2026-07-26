@@ -71,15 +71,25 @@ def parse_intake(text: str, prefs: dict[str, Any]) -> dict[str, Any]:
     elif s := _SEC_RE.search(lowered):
         duration_min = max(1, round(int(s.group(1)) / 60))
 
+    # A stated *ability* wins over an incidental mention of sitting. "My glutes
+    # feel dead from sitting and I can stand up" is a standing session: "sitting"
+    # there names the cause, not the constraint. So check ability first, and keep
+    # the seated patterns to phrases that actually express a restriction.
     can_stand = prefs.get("can_stand", True)
     if re.search(
-        r"\b(seated|sitting|stay in my (?:chair|seat)|can't stand|cant stand|"
-        r"on a call|in a meeting)\b",
+        r"\b(can stand|could stand|able to stand|can get up|can stand up|"
+        r"happy to stand|standing is fine|standing'?s fine|on my feet|"
+        r"don'?t mind standing)\b",
+        lowered,
+    ):
+        can_stand = True
+    elif re.search(
+        r"\b(stay seated|seated only|remain seated|stay in my (?:chair|seat)|"
+        r"stay at my desk|can'?t stand|cannot stand|can'?t get up|need to sit|"
+        r"have to sit|without standing|on a call|in a meeting|at my desk)\b",
         lowered,
     ):
         can_stand = False
-    elif re.search(r"\b(stand|standing|get up|on my feet)\b", lowered):
-        can_stand = True
 
     intensity = (
         "gentle"

@@ -15,7 +15,7 @@ from __future__ import annotations
 import math
 import time
 from collections import deque
-from typing import Any, Iterable
+from typing import Any, List
 
 from .pose import (
     L_ANKLE, L_EAR, L_ELBOW, L_HIP, L_KNEE, L_SHOULDER, L_WRIST,
@@ -26,7 +26,9 @@ VISIBILITY_MIN = 0.5
 FAULT_PERSIST_FRAMES = 5
 SMOOTH_WINDOW = 5
 
-Keypoints = list[list[float]]
+# typing.List, not list[...]: aliases are evaluated at runtime regardless of the
+# __future__ import, and builtin generics need 3.9+.
+Keypoints = List[List[float]]
 
 
 # ─────────────────────────────── geometry ───────────────────────────────

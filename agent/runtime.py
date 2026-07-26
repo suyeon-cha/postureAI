@@ -19,14 +19,17 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Any, Callable
+from typing import Any, Callable, Dict
 
 from . import llm, tools
 
 RUNTIME = os.environ.get("FLOWRESET_RUNTIME", "native").lower()
 MAX_STEPS = int(os.environ.get("FLOWRESET_MAX_STEPS", "6"))
 
-StepCallback = Callable[[dict[str, Any]], None]
+# typing.Dict, not dict[...]: a type *alias* is evaluated at runtime even with
+# `from __future__ import annotations`, and builtin generics only became
+# subscriptable in 3.9. We don't control the Python on the box.
+StepCallback = Callable[[Dict[str, Any]], None]
 
 
 def active_runtime() -> dict[str, Any]:
