@@ -314,15 +314,6 @@ def workspace_summary(days: int = 30) -> dict[str, Any]:
         }
 
     done = [s for s in sessions if s["completed"]]
-    responses = {"better": 0, "same": 0, "worse": 0}
-    for s in done:
-        if s["response"] in responses:
-            responses[s["response"]] += 1
-
-    by_symptom: dict[str, int] = {}
-    for s in sessions:
-        by_symptom[s["symptom"]] = by_symptom.get(s["symptom"], 0) + 1
-
     teams: dict[str, dict[str, Any]] = {}
     for s in sessions:
         t = teams.setdefault(
@@ -361,9 +352,6 @@ def workspace_summary(days: int = 30) -> dict[str, Any]:
         "sessions_started": len(sessions),
         "sessions_completed": len(done),
         "completion_rate": round(len(done) / len(sessions), 2) if sessions else 0.0,
-        "better_rate": round(responses["better"] / len(done), 2) if done else 0.0,
-        "responses": responses,
-        "by_symptom": by_symptom,
         "teams": team_rows,
         "suppressed_teams": suppressed_teams,
         "per_person_per_week": round(
@@ -373,7 +361,7 @@ def workspace_summary(days: int = 30) -> dict[str, Any]:
 
 
 def wipe(user_id: str = "local") -> None:
-    """Settings → 'Delete my local history'. Actually deletes."""
+    """Settings → 'Delete all my local data'. Deletes sessions and preferences."""
     with _lock, connect() as conn:
         conn.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
         conn.execute("DELETE FROM prefs WHERE user_id = ?", (user_id,))

@@ -89,7 +89,7 @@ const KNOWLEDGE = {
     retention: {
       raw_frames: "Memory only; discarded immediately after local inference",
       landmarks: "Session only",
-      personal_history: "90-day rolling default",
+      personal_history: "Until the user deletes it in this prototype; automated retention is a production requirement",
       employer_reporting: "Aggregate, opted-in cohorts of 10 or more",
     },
   },
@@ -149,7 +149,7 @@ export class MockBackend {
       voice: true,
       watch_mode: false,
       team: "Engineering",
-      workspace_opt_in: true,
+      workspace_opt_in: false,
     };
     this.plan = null;
     this.session = null;
@@ -480,18 +480,6 @@ export class MockBackend {
         sessions_started: sessions,
         sessions_completed: completed,
         completion_rate: +(completed / sessions).toFixed(2),
-        better_rate: 0.76,
-        responses: {
-          better: Math.round(completed * 0.76),
-          same: Math.round(completed * 0.2),
-          worse: Math.round(completed * 0.04),
-        },
-        by_symptom: {
-          neck_shoulders: Math.round(sessions * 0.44),
-          back_hips: Math.round(sessions * 0.28),
-          wrists_hands: Math.round(sessions * 0.16),
-          tired_eyes: Math.round(sessions * 0.12),
-        },
         teams: reported,
         suppressed_teams: teams.length - reported.length,
         per_person_per_week: +(sessions / participants / 4).toFixed(1),

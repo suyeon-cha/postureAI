@@ -42,6 +42,11 @@ current unified application branch.
 | Local voice input/output | Working when models installed | faster-whisper + Piper |
 | Personal insights dashboard | Working | Non-repetitive routine, outcome, focus-area, next-action, and expandable history views |
 | Employer reporting | Working, admin-only | Aggregate-only query with 10-person floor; not exposed in employee navigation |
+| First-use wellness-data consent | Working | Required affirmative consent, adult-use acknowledgement, Not now path |
+| Per-session camera consent | Working | Just-in-time disclosure; timer-only alternative remains available |
+| Consumer privacy center | Working | Data map, purpose, sharing boundary, export, delete, and withdrawal controls |
+| Wellness and safety disclaimer | Working | General-wellness boundary, stop signals, camera limitations, voluntary alternatives |
+| Prototype use terms | Working | Adult use, voluntary participation, safe-use duties, AI limitations, no guaranteed outcome |
 | Shareable preview | Working | `ui/preview.html`, clearly labelled as synthetic |
 | No external AI APIs | Enforced | Local endpoint assertion and verification script |
 
@@ -67,8 +72,9 @@ current unified application branch.
 7. **Production identity and access.** The hackathon build is single-user local.
    Employer SSO, tenant administration, audit controls, and deployment policy
    are future work.
-8. **Formal 90-day deletion job.** The product policy and UI are defined, but a
-   scheduled retention worker still needs to enforce automatic rolling deletion.
+8. **Formal retention job.** The prototype truthfully retains personal history
+   until the user deletes it. A production deployment must define, disclose,
+   implement, and test an automatic retention schedule, including backups.
 9. **Accessibility validation.** Semantic controls and keyboard focus are
    present; screen-reader, contrast, zoom, and reduced-motion QA still need a
    formal pass.

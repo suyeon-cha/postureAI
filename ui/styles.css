@@ -178,6 +178,11 @@ button { font: inherit; cursor: pointer; }
 .site-footer strong { color: var(--ink); display: block; margin-bottom: 6px; font-size: 0.9rem; }
 .site-footer .legal { flex-basis: 100%; border-top: 1px solid var(--line); padding-top: 18px;
                       color: var(--ink-3); font-size: 0.79rem; }
+.footer-links { flex-basis: 100%; display: flex; gap: 16px; flex-wrap: wrap; }
+.footer-links button {
+  border: 0; padding: 0; background: transparent; color: var(--accent-ink);
+  text-decoration: underline; text-underline-offset: 3px; font-size: 0.8rem;
+}
 
 /* ─────────────────────────── primitives ─────────────────────────── */
 
@@ -460,6 +465,11 @@ textarea::placeholder { color: var(--ink-3); }
 .camera-details { border-top: 1px solid var(--line); padding-top: 11px; }
 .camera-details summary { cursor: pointer; font-size: 0.86rem; font-weight: 570; }
 .camera-details p { margin-top: 8px; }
+.camera-consent {
+  padding: 12px 14px; border-radius: 9px; border: 1px solid var(--line);
+  background: var(--surface); color: var(--ink-2);
+}
+.camera-consent strong { color: var(--ink); }
 @media (max-width: 760px) { .ready-list { grid-template-columns: 1fr; } }
 
 /* guided session */
@@ -648,6 +658,27 @@ tr[data-live="true"] td { background: var(--accent-soft); }
   border: 1px dashed var(--line-strong); border-radius: var(--radius-sm);
   padding: 16px 18px; color: var(--ink-2); background: var(--surface-2);
 }
+
+.trust-page { max-width: 1120px; margin-inline: auto; }
+.consent-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.consent-grid > div {
+  display: grid; gap: 4px; padding: 14px; border: 1px solid var(--line);
+  border-radius: var(--radius-sm); background: var(--surface-2);
+}
+.consent-grid span { color: var(--ink-2); font-size: 0.84rem; }
+.consent-check {
+  display: flex; align-items: flex-start; gap: 12px; padding: 15px;
+  border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+.consent-check input { width: 20px; height: 20px; margin-top: 2px; accent-color: var(--accent); }
+.consent-check span { display: grid; gap: 3px; }
+.consent-check small { color: var(--ink-2); }
+.policy-list { margin: 0; padding-left: 20px; color: var(--ink-2); font-size: 0.88rem; }
+.policy-list li + li { margin-top: 8px; }
+.data-map td:first-child { font-weight: 560; color: var(--ink); }
+.safety-stop { border-color: color-mix(in srgb, var(--rose) 36%, var(--line)); }
+@media (max-width: 720px) { .consent-grid { grid-template-columns: 1fr; } }
 
 /* trace */
 

@@ -51,6 +51,7 @@ const NAV = [
   { key: "home", label: "Reset" },
   { key: "dashboard", label: "My insights" },
 ];
+const CONSENT_VERSION = "2026-07-26-v1";
 
 // ─────────────────────────────── state ───────────────────────────────
 
@@ -67,7 +68,7 @@ const S = {
     coach_style: "supportive",
     voice: true,
     watch_mode: false,
-    workspace_opt_in: true,
+    workspace_opt_in: false,
     team: "Engineering",
   },
   // `touched` records which constraints the user actually set. Untouched chips
@@ -92,6 +93,12 @@ const S = {
   insight: null,
   videoStatus: null,
   onboarded: localStorage.getItem("flowreset.onboarded") === "1",
+  healthConsent:
+    localStorage.getItem("flowreset.healthDataConsent") === "1" &&
+    localStorage.getItem("flowreset.healthDataConsentVersion") === CONSENT_VERSION,
+  healthConsentAt: localStorage.getItem("flowreset.healthDataConsentAt"),
+  consentNext: "home",
+  returnTo: null,
 };
 
 let socket = null;
@@ -160,7 +167,7 @@ async function boot() {
 
   S.intake.duration_min = S.prefs.preferred_duration_min;
   S.intake.can_stand = S.prefs.can_stand;
-  S.screen = S.onboarded ? "home" : "welcome";
+  S.screen = S.onboarded ? (S.healthConsent ? "home" : "consent") : "welcome";
   renderBadge();
   if (S.preview) showPreviewNotice();
   render();
@@ -290,16 +297,28 @@ function renderNav() {
   $("#brandHome").addEventListener("click", (e) => {
     e.preventDefault();
     if (S.screen === "session") return;
-    go(S.onboarded ? "home" : "welcome");
+    go(S.onboarded ? (S.healthConsent ? "home" : "consent") : "welcome");
   });
   $("#settingsShortcut").addEventListener("click", () => {
-    if (S.screen !== "session" && S.onboarded) go("settings");
+    if (S.screen !== "session" && S.onboarded && S.healthConsent) go("settings");
+  });
+  $("#privacyShortcut").addEventListener("click", () => {
+    S.returnTo = S.screen;
+    go("privacy");
+  });
+  $("#safetyShortcut").addEventListener("click", () => {
+    S.returnTo = S.screen;
+    go("safety");
+  });
+  $("#termsShortcut").addEventListener("click", () => {
+    S.returnTo = S.screen;
+    go("terms");
   });
   markNav();
 }
 
 function markNav() {
-  const open = S.onboarded ? NAV.map((n) => n.key) : [];
+  const open = S.onboarded && S.healthConsent ? NAV.map((n) => n.key) : [];
   const active = ["plan", "session", "complete", "escalate"].includes(S.screen) ? "home" : S.screen;
   [...$("#nav").children].forEach((b, i) => {
     const key = NAV[i].key;
@@ -309,7 +328,7 @@ function markNav() {
     else b.removeAttribute("aria-current");
   });
   const settings = $("#settingsShortcut");
-  settings.hidden = !S.onboarded;
+  settings.hidden = !S.onboarded || !S.healthConsent;
   settings.disabled = S.screen === "session";
   if (S.screen === "settings") settings.setAttribute("aria-current", "page");
   else settings.removeAttribute("aria-current");
@@ -422,6 +441,7 @@ function render() {
   markNav();
   const view = {
     welcome: viewWelcome,
+    consent: viewConsent,
     goals: viewGoals,
     prefs: viewPrefs,
     home: viewHome,
@@ -433,6 +453,9 @@ function render() {
     knowledge: viewKnowledge,
     workspace: viewWorkspace,
     settings: viewSettings,
+    privacy: viewPrivacy,
+    safety: viewSafety,
+    terms: viewTerms,
     help: viewHelp,
   }[S.screen];
   app.append(view());
@@ -536,10 +559,89 @@ function viewWelcome() {
     </section>
   </div>`);
 
-  $("#start", wrap).addEventListener("click", () => go("goals"));
-  $("#start2", wrap).addEventListener("click", () => go("goals"));
-  $("#skipOnboard", wrap).addEventListener("click", finishOnboarding);
-  $("#skip2", wrap).addEventListener("click", finishOnboarding);
+  $("#start", wrap).addEventListener("click", () => beginConsent("goals"));
+  $("#start2", wrap).addEventListener("click", () => beginConsent("goals"));
+  $("#skipOnboard", wrap).addEventListener("click", () => beginConsent("home"));
+  $("#skip2", wrap).addEventListener("click", () => beginConsent("home"));
+  return wrap;
+}
+
+function beginConsent(next) {
+  if (S.healthConsent) {
+    if (next === "home") finishOnboarding();
+    else go(next);
+    return;
+  }
+  S.consentNext = next;
+  go("consent");
+}
+
+function viewConsent() {
+  const wrap = el(`<div class="trust-page stack">
+    <div class="stack-sm measure">
+      <span class="eyebrow">Required before first use</span>
+      <h1>Your wellness data stays under your control</h1>
+      <p class="hero-lede">FlowReset needs a small amount of health-adjacent information
+        to build a reset and remember what helped. Review the purpose before agreeing.</p>
+    </div>
+
+    <section class="card stack">
+      <h2>What this prototype collects</h2>
+      <div class="consent-grid">
+        <div><strong>Your input</strong><span>Selected body area, optional concerns,
+          goals, movement preferences, and session feedback.</span></div>
+        <div><strong>Session activity</strong><span>Routine, duration, completion,
+          and your Better / Same / Worse response.</span></div>
+        <div><strong>Optional camera</strong><span>Frames are processed in memory on
+          the GB10 only after separate per-session consent; video is not stored.</span></div>
+        <div><strong>Purpose</strong><span>Build general-wellness resets,
+          personalize future suggestions, and show your private insights.</span></div>
+      </div>
+      <div class="notice small"><strong>No sale, advertising, or individual employer access.</strong>
+        No external AI API receives this data. Optional employer reporting is off by default
+        and contains aggregate participation totals only for groups of 10 or more.</div>
+      <label class="consent-check">
+        <input type="checkbox" id="healthConsent">
+        <span><strong>I am 18 or older and agree to this local collection and use.</strong>
+          <small>I can export or delete my data and withdraw future consent at any time.</small></span>
+      </label>
+      <div class="row">
+        <button class="btn" id="acceptConsent" disabled>Agree and continue</button>
+        <button class="btn secondary" id="declineConsent">Not now</button>
+        <button class="btn subtle" id="readPrivacy">Read the full privacy notice</button>
+      </div>
+    </section>
+
+    <p class="tiny muted">FlowReset is a hackathon general-wellness prototype, not medical
+      care or a medical device. This notice describes current behavior; it is not a claim
+      of HIPAA certification or production legal compliance.</p>
+  </div>`);
+  const check = $("#healthConsent", wrap);
+  const accept = $("#acceptConsent", wrap);
+  check.addEventListener("change", () => { accept.disabled = !check.checked; });
+  accept.addEventListener("click", () => {
+    S.healthConsent = true;
+    S.healthConsentAt = new Date().toISOString();
+    localStorage.setItem("flowreset.healthDataConsent", "1");
+    localStorage.setItem("flowreset.healthDataConsentVersion", CONSENT_VERSION);
+    localStorage.setItem("flowreset.healthDataConsentAt", S.healthConsentAt);
+    if (S.consentNext === "goals") go("goals");
+    else finishOnboarding();
+  });
+  $("#declineConsent", wrap).addEventListener("click", () => {
+    S.healthConsent = false;
+    S.healthConsentAt = null;
+    localStorage.removeItem("flowreset.healthDataConsent");
+    localStorage.removeItem("flowreset.healthDataConsentVersion");
+    localStorage.removeItem("flowreset.healthDataConsentAt");
+    S.onboarded = false;
+    localStorage.removeItem("flowreset.onboarded");
+    go("welcome");
+  });
+  $("#readPrivacy", wrap).addEventListener("click", () => {
+    S.returnTo = "consent";
+    go("privacy");
+  });
   return wrap;
 }
 
@@ -862,6 +964,13 @@ function viewPlan() {
           <p class="small muted">${esc(kb?.camera?.checks?.join(" · ") || "Visibility, pace, and broad movement signals.")}</p>
           <p class="tiny muted">${esc(kb?.camera?.limitation || "This is broad form awareness, not clinical assessment.")}</p>
         </details>
+        <div class="camera-consent small">
+          <strong>Camera consent applies to this session only.</strong>
+          Frames travel over the private local connection to the GB10 for in-memory
+          analysis, are not stored, and stop when the session ends. Choosing
+          <em>Start with camera coaching</em> confirms your consent; timer-only guidance
+          remains available without it.
+        </div>
         <div class="row">
           <button class="btn" id="startCam">Start with camera coaching</button>
           <button class="btn secondary" id="startNoCam">Start without camera</button>
@@ -1491,14 +1600,7 @@ function viewWorkspace() {
     <div class="grid stat-row">
       <div class="card stat"><div class="num">${w.participants}</div><div class="lbl">people opted in</div></div>
       <div class="card stat"><div class="num">${w.per_person_per_week}</div><div class="lbl">resets per person per week</div></div>
-      <div class="card stat"><div class="num">${Math.round(w.better_rate * 100)}%</div><div class="lbl">reported feeling better</div></div>
       <div class="card stat"><div class="num">${Math.round(w.completion_rate * 100)}%</div><div class="lbl">completion rate</div></div>
-    </div>
-
-    <div class="card stack">
-      <div class="stack-sm"><h2>Reported outcome</h2>
-        <p class="small muted">Self-reported, aggregated across ${w.sessions_completed} completed resets.</p></div>
-      <div id="split"></div>
     </div>
 
     <div class="card stack">
@@ -1512,7 +1614,6 @@ function viewWorkspace() {
     </div>
   </div>`);
 
-  $("#split", wrap).append(charts.responseSplit(w.responses));
   (w.teams || []).forEach((t) => {
     $("#rows", wrap).append(el(`<tr>
       <td><strong>${esc(t.team)}</strong></td><td>${t.participants}</td><td>${t.sessions}</td>
@@ -1539,18 +1640,22 @@ function viewSettings() {
 
     <div class="card stack">
       <h2>Camera &amp; privacy</h2>
+      <div class="row"><span class="pill good">Health-data consent recorded locally · ${esc(CONSENT_VERSION)}</span>
+        <button class="btn subtle" id="privacyCenter">Open privacy center</button></div>
       <div class="switch"><div class="txt"><strong>Watch mode</strong>
         <span class="small muted">Off by default. When on, FlowReset tracks accumulated sitting
         and neck time and <em>offers</em> a reset — it never starts one, and it stops asking if
         you decline. Turning it off clears what it accumulated.</span></div>
         <button class="toggle" id="watch" aria-pressed="${S.prefs.watch_mode}" aria-label="Watch mode"></button></div>
       <div class="switch"><div class="txt"><strong>Share anonymous totals with my workspace</strong>
-        <span class="small muted">Sends counts only, and only inside a cohort of 10+ people.
-        Never your video, your symptoms, or your individual sessions.</span></div>
+        <span class="small muted">Optional and off by default. Sends aggregate participation
+        counts only inside a cohort of 10+ people—never video, concerns, body areas,
+        responses, or individual sessions.</span></div>
         <button class="toggle" id="ws" aria-pressed="${S.prefs.workspace_opt_in}" aria-label="Workspace sharing"></button></div>
       <div class="row">
         <button class="btn secondary" id="export">Export my data</button>
-        <button class="btn subtle" id="wipe" style="color:var(--rose)">Delete my local history</button>
+        <button class="btn subtle" id="wipe" style="color:var(--rose)">Delete all my local data</button>
+        <button class="btn subtle" id="withdraw">Withdraw future consent</button>
       </div>
     </div>
 
@@ -1611,43 +1716,240 @@ function viewSettings() {
   };
   toggle("voice", "voice");
   toggle("watch", "watch_mode", (on) => send({ type: "watch_mode", on }));
-  toggle("ws", "workspace_opt_in");
-
-  $("#export", wrap).addEventListener("click", async () => {
-    try {
-      const data = mock ? { prefs: S.prefs, sessions: mock.sessions } :
-        await fetch("/api/export").then((r) => {
-          if (!r.ok) throw new Error("export failed");
-          return r.json();
-        });
-      const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }));
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "flowreset-export.json";
-      a.click();
-      URL.revokeObjectURL(url);
-      showToast("Your FlowReset data export is ready.", "status");
-    } catch {
-      showToast("FlowReset could not export your data. Check the local connection and try again.", "error");
-    }
+  $("#ws", wrap).addEventListener("click", () => {
+    const turningOn = !S.prefs.workspace_opt_in;
+    if (turningOn && !confirm(
+      "Share aggregate participation counts with the employer wellness administrator? " +
+      "This is optional. Personal concerns, body areas, responses, and sessions are excluded."
+    )) return;
+    S.prefs.workspace_opt_in = turningOn;
+    $("#ws", wrap).setAttribute("aria-pressed", String(turningOn));
+    savePrefs();
   });
 
-  $("#wipe", wrap).addEventListener("click", async () => {
-    if (!confirm("Delete all local FlowReset history? This cannot be undone.")) return;
-    if (mock) mock.sessions = [];
-    else {
-      const response = await fetch("/api/history", { method: "DELETE" }).catch(() => null);
-      if (!response?.ok) {
-        showToast("FlowReset could not delete the history. Check the local connection and try again.", "error");
-        return;
-      }
-    }
-    S.dashboard = null;
-    await loadDashboard();
-    showToast("Local session history deleted.", "status");
-    go("dashboard");
-  });
+  $("#privacyCenter", wrap).addEventListener("click", () => { S.returnTo = "settings"; go("privacy"); });
+  $("#export", wrap).addEventListener("click", exportMyData);
+  $("#wipe", wrap).addEventListener("click", deleteMyData);
+  $("#withdraw", wrap).addEventListener("click", withdrawHealthConsent);
 
+  return wrap;
+}
+
+async function exportMyData() {
+  try {
+    const data = mock ? { prefs: S.prefs, sessions: mock.sessions } :
+      await fetch("/api/export").then((r) => {
+        if (!r.ok) throw new Error("export failed");
+        return r.json();
+      });
+    data.consent = {
+      accepted: S.healthConsent,
+      accepted_at: S.healthConsentAt,
+      notice_version: CONSENT_VERSION,
+    };
+    const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "flowreset-export.json";
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast("Your FlowReset data export is ready.", "status");
+  } catch {
+    showToast("FlowReset could not export your data. Check the local connection and try again.", "error");
+  }
+}
+
+async function deleteMyData() {
+  if (!confirm("Delete all local preferences and session history? This cannot be undone.")) return;
+  if (mock) {
+    mock.sessions = [];
+    mock.prefs = { ...mock.prefs, workspace_opt_in: false, concerns: "" };
+  } else {
+    const response = await fetch("/api/history", { method: "DELETE" }).catch(() => null);
+    if (!response?.ok) {
+      showToast("FlowReset could not delete your data. Check the local connection and try again.", "error");
+      return;
+    }
+  }
+  localStorage.removeItem("flowreset.onboarded");
+  localStorage.removeItem("flowreset.healthDataConsent");
+  localStorage.removeItem("flowreset.healthDataConsentVersion");
+  localStorage.removeItem("flowreset.healthDataConsentAt");
+  S.onboarded = false;
+  S.healthConsent = false;
+  S.healthConsentAt = null;
+  S.dashboard = null;
+  S.prefs.workspace_opt_in = false;
+  showToast("Your local preferences and session history were deleted.", "status");
+  go("welcome");
+}
+
+function withdrawHealthConsent() {
+  if (!confirm(
+    "Withdraw consent for future wellness-data collection? Existing local data remains " +
+    "until you export or delete it, and FlowReset cannot run new personalized sessions."
+  )) return;
+  S.healthConsent = false;
+  S.healthConsentAt = null;
+  S.prefs.workspace_opt_in = false;
+  S.prefs.watch_mode = false;
+  localStorage.removeItem("flowreset.healthDataConsent");
+  localStorage.removeItem("flowreset.healthDataConsentVersion");
+  localStorage.removeItem("flowreset.healthDataConsentAt");
+  savePrefs();
+  stopCamera();
+  S.consentNext = "home";
+  go("consent");
+}
+
+function infoBack(fallback = "welcome") {
+  const target = S.returnTo && !["privacy", "safety", "terms"].includes(S.returnTo)
+    ? S.returnTo : fallback;
+  S.returnTo = null;
+  go(target);
+}
+
+function viewPrivacy() {
+  const wrap = el(`<div class="trust-page stack">
+    <div class="row"><button class="btn subtle" id="privacyBack">← Back</button>
+      <span class="pill info">Prototype notice · July 26, 2026</span></div>
+    <div class="stack-sm measure"><span class="eyebrow">Consumer health data privacy</span>
+      <h1>What FlowReset collects—and what it does not</h1>
+      <p class="hero-lede">This standalone notice explains the current local prototype.
+        It is written for employees, not lawyers.</p></div>
+
+    <section class="card stack">
+      <h2>Data map</h2>
+      <div class="table-scroll"><table class="data-map">
+        <thead><tr><th>Data</th><th>Source</th><th>Purpose</th><th>Current retention</th></tr></thead>
+        <tbody>
+          <tr><td>Goals, preferences, optional concerns</td><td>You</td>
+            <td>Personalize resets</td><td>On this GB10 until changed or deleted</td></tr>
+          <tr><td>Body area, routine, duration, completion, response</td><td>Your sessions</td>
+            <td>Run sessions and create My insights</td><td>On this GB10 until deleted</td></tr>
+          <tr><td>Camera frames and pose landmarks</td><td>Optional webcam</td>
+            <td>Session-only movement feedback</td><td>Memory only; discarded during processing</td></tr>
+          <tr><td>Voice recording</td><td>Optional microphone</td>
+            <td>Local transcription of your request</td><td>Temporary file deleted after transcription</td></tr>
+          <tr><td>Consent state, notice version, timestamp</td><td>You</td>
+            <td>Gate future collection and document the notice accepted</td>
+            <td>Browser-local until withdrawn or deleted; included in export</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <div class="grid cols-2">
+      <section class="card stack-sm"><h2>Sharing and sale</h2>
+        <ul class="policy-list">
+          <li>No external AI API receives your data.</li>
+          <li>No advertising, data broker, or sale of consumer health data.</li>
+          <li>Your employer cannot see individual concerns, body areas, responses,
+            sessions, camera, voice, or video.</li>
+          <li>Optional employer reporting is off by default and limited to aggregate
+            participation counts for cohorts of at least 10.</li>
+        </ul></section>
+      <section class="card stack-sm"><h2>Your controls</h2>
+        <ul class="policy-list">
+          <li>Camera permission is requested separately for each session.</li>
+          <li>Workspace aggregation requires separate opt-in.</li>
+          <li>Export a readable copy of preferences and session history.</li>
+          <li>Delete all local data or withdraw consent for future collection.</li>
+        </ul>
+        <div class="row">
+          <button class="btn secondary" id="privacyExport">Export my data</button>
+          <button class="btn subtle" id="privacyDelete" style="color:var(--rose)">Delete all data</button>
+        </div></section>
+    </div>
+
+    <section class="notice small stack-sm">
+      <strong>HIPAA and production deployment</strong>
+      <p>HIPAA applicability depends on whether FlowReset is offered through a covered
+        health plan or another covered entity and on the operator's relationships. This
+        hackathon prototype does not claim HIPAA compliance or certification. A production
+        pilot still requires verified operator contact details, identity and access controls,
+        encryption-at-rest review, retention automation, incident response, and legal review.</p>
+    </section>
+  </div>`);
+  $("#privacyBack", wrap).addEventListener("click", () => infoBack(S.healthConsent ? "settings" : "welcome"));
+  $("#privacyExport", wrap).addEventListener("click", exportMyData);
+  $("#privacyDelete", wrap).addEventListener("click", deleteMyData);
+  return wrap;
+}
+
+function viewSafety() {
+  const wrap = el(`<div class="trust-page stack">
+    <div class="row"><button class="btn subtle" id="safetyBack">← Back</button>
+      <span class="pill warn">General wellness only</span></div>
+    <div class="stack-sm measure"><span class="eyebrow">Wellness &amp; safety disclaimer</span>
+      <h1>Movement awareness—not medical assessment</h1>
+      <p class="hero-lede">FlowReset provides short movement and screen-rest breaks for
+        adults. It does not diagnose, treat, cure, prevent, or monitor a disease or injury.</p></div>
+
+    <div class="grid cols-2">
+      <section class="card stack-sm"><h2>Use FlowReset when</h2>
+        <ul class="policy-list">
+          <li>You want a voluntary general-wellness break during desk work.</li>
+          <li>You can move within a comfortable, pain-free range.</li>
+          <li>You have a stable chair, suitable clothing, and clear floor space.</li>
+          <li>You understand camera feedback checks broad visible movement signals only.</li>
+        </ul></section>
+      <section class="card stack-sm safety-stop"><h2>Stop and seek help when</h2>
+        <ul class="policy-list">
+          <li>A movement causes sharp, new, or worsening pain.</li>
+          <li>You experience dizziness, faintness, chest pain, breathing difficulty,
+            numbness, weakness, loss of balance, or new vision changes.</li>
+          <li>Symptoms are severe, persistent, recurring, or follow an injury.</li>
+          <li>For a possible emergency, stop and contact local emergency services.</li>
+        </ul></section>
+    </div>
+
+    <section class="card stack"><h2>Important limitations</h2>
+      <div class="consent-grid">
+        <div><strong>Not physical therapy</strong><span>No diagnosis, rehabilitation
+          plan, prescription, or individualized medical advice.</span></div>
+        <div><strong>Camera is not a clinician</strong><span>It can miss unsafe form,
+          occlusion, pain, mobility limits, and conditions that are not visible.</span></div>
+        <div><strong>No guaranteed outcome</strong><span>A completed reset or positive
+          score does not prove that a movement is safe or effective for you.</span></div>
+        <div><strong>Your choice</strong><span>Participation, camera use, and employer
+          aggregation are voluntary. Seated and timer-only alternatives are available.</span></div>
+      </div>
+    </section>
+  </div>`);
+  $("#safetyBack", wrap).addEventListener("click", () => infoBack(S.healthConsent ? "home" : "welcome"));
+  return wrap;
+}
+
+function viewTerms() {
+  const wrap = el(`<div class="trust-page stack">
+    <div class="row"><button class="btn subtle" id="termsBack">← Back</button>
+      <span class="pill">Hackathon prototype</span></div>
+    <div class="stack-sm measure"><span class="eyebrow">Prototype use terms</span>
+      <h1>Use FlowReset as a voluntary wellness aid</h1>
+      <p class="hero-lede">These plain-language terms set the boundaries for demonstrating
+        and evaluating this prototype.</p></div>
+
+    <section class="card stack">
+      <div class="consent-grid">
+        <div><strong>Adults only</strong><span>FlowReset is designed for adults 18 and
+          older who can choose whether and how to participate.</span></div>
+        <div><strong>Not healthcare</strong><span>Do not use it for diagnosis, treatment,
+          rehabilitation, emergency help, or as a substitute for a qualified professional.</span></div>
+        <div><strong>Use safely</strong><span>Clear your space, use a stable chair, stay
+          within a comfortable range, and stop if symptoms appear or worsen.</span></div>
+        <div><strong>No guaranteed result</strong><span>AI and camera feedback may be
+          incomplete or wrong. A displayed cue is not proof that movement is safe.</span></div>
+        <div><strong>Voluntary at work</strong><span>Employers must not require camera use,
+          use personal wellness information for employment decisions, or retaliate for opting out.</span></div>
+        <div><strong>Prototype availability</strong><span>The hackathon build may change,
+          fail, or be unavailable and has not completed production security or clinical review.</span></div>
+      </div>
+      <div class="notice small">By using the prototype, you acknowledge these boundaries.
+        A production release requires verified operator identity, governing-law terms,
+        accessibility commitments, support contacts, and counsel-approved language.</div>
+    </section>
+  </div>`);
+  $("#termsBack", wrap).addEventListener("click", () => infoBack(S.healthConsent ? "home" : "welcome"));
   return wrap;
 }
 

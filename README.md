@@ -29,6 +29,12 @@ adapt future recommendations.
 This is a general-wellness product, not medical care, physical therapy, or a posture-grading
 surveillance system.
 
+The interface includes first-use wellness-data consent, separate per-session
+camera consent, export, complete local deletion, future-consent withdrawal, a
+standalone consumer-health-data notice, and a wellness/safety disclaimer.
+See [`PRIVACY_AND_SAFETY.md`](PRIVACY_AND_SAFETY.md). These controls describe
+the prototype honestly; they are not a claim of HIPAA certification.
+
 ## Employee experience and employer boundary
 
 | Employee capability | Trigger | Camera | Default |
@@ -157,7 +163,8 @@ approval process, broader-body testing, and confidence-threshold evaluation.
   text field remains usable.
 - Memory stores symptom, routine, duration, and a Better/Same/Worse answer. No landmarks, no
   video, no audio, no scores.
-- Settings has a real export and a real delete.
+- Settings has a real export, complete local deletion, and future-consent withdrawal.
+- Employer aggregation is off by default and requires separate opt-in.
 
 ### Employer reporting (separate admin surface)
 
