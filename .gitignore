@@ -1,0 +1,15 @@
+# models & weights — come from the USB drive, never git
+models/
+*.task
+*.gguf
+*.onnx
+
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# audio artifacts
+*.wav
+
+.DS_Store

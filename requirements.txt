@@ -1,0 +1,9 @@
+mediapipe
+opencv-python
+fastapi
+uvicorn[standard]
+websockets
+numpy
+piper-tts
+requests
+pyyaml

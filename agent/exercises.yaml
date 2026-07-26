@@ -1,0 +1,16 @@
+# FlowReset exercise library — lane 2 owns this file.
+# Schema: see contracts.md. One example entry below; library is written at the event.
+# Planned: neck_side_stretch, shoulder_rolls, y_raise, seated_twist, chin_tuck,
+#          cat_cow, chest_opener, trap_stretch, hip_flexor_reset, wrist_stretch,
+#          squat, lunge
+
+_example_squat:
+  name: "Bodyweight squat"
+  targets: [sitting, hips]
+  detection: reps
+  target_reps: 8
+  requires_full_body: true
+  cues:
+    setup: "Step back until I can see your ankles."
+    during: "Slow on the way down — four seconds."
+    fault_knee_valgus: "Knees are caving — push them out."
