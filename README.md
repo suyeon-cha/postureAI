@@ -46,7 +46,9 @@ The agent retrieves source-grounded guidance from `agent/knowledge.yaml`; employ
 history remains outside the shared content store. See
 [`FLOWRESET_KNOWLEDGE_BASE.md`](FLOWRESET_KNOWLEDGE_BASE.md) for the content and
 privacy contract and [`FEATURE_STATUS.md`](FEATURE_STATUS.md) for the truthful
-implemented/missing feature matrix.
+implemented/missing feature matrix. UI decisions and regression checks are
+mapped to Nielsen's ten heuristics in
+[`USABILITY_HEURISTIC_AUDIT.md`](USABILITY_HEURISTIC_AUDIT.md).
 
 ### The agent is ours; the framework is not the agent
 
