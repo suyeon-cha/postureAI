@@ -174,7 +174,13 @@ def compose(
     while spent + 25 <= budget - reserve and guard < 60:
         guard += 1
         unused = [kv for kv in candidates if kv[0] not in moves]
-        pool = unused or [kv for kv in candidates if kv[0] != moves[-1]]
+        # Gentle stretches can come round again in a long session; loaded work
+        # cannot. Two sets of lunges inside one desk break is a different
+        # product, and it reads as a bug even when it fits the budget.
+        pool = unused or [
+            kv for kv in candidates
+            if kv[0] != moves[-1] and kv[1].get("intensity") != "moderate"
+        ]
         if not pool:
             break
         affordable = [kv for kv in pool if spent + kv[1].get("seconds", 40) <= budget - reserve]

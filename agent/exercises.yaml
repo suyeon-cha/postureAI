@@ -293,7 +293,11 @@ hip_hinge:
 
 lunge:
   name: "Split-stance lunge"
-  targets: [glutes, legs, hips]
+  # `sitting` is earned, not padding: the back-leg position opens the hip
+  # flexor, which is the muscle a chair shortens. It also lifts the lunge into
+  # back_hips range — at 70s it is the most expensive move in the library and
+  # was ranking below the budget on every duration.
+  targets: [glutes, legs, hips, sitting]
   detection: reps
   target_reps: 6
   sides: 2
