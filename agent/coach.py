@@ -191,24 +191,31 @@ class FlowResetAgent:
             intensity=intake["intensity"],
             user_id=self.user_id,
         )
+        grounding = tools.retrieve_wellness_guidance(plan["symptom"])
+        plan["knowledge"] = grounding
+        self._emit(
+            {
+                "kind": "tool",
+                "name": "retrieve_wellness_guidance",
+                "arguments": {"area": plan["symptom"]},
+                "result": {
+                    "title": grounding.get("title"),
+                    "sources": [s.get("organization") for s in grounding.get("sources", [])],
+                    "review_status": grounding.get("review_status"),
+                },
+            }
+        )
 
         if not explanation:
             explanation = self._fallback_explanation(plan, intake)
         explanation = persona.sanitize(explanation)
 
         self.plan = plan
-        self.session_id = memory.start_session(
-            symptom=plan["symptom"],
-            duration_min=plan["duration_min"],
-            moves=plan["moves"],
-            user_id=self.user_id,
-            trigger=intake.get("trigger", "user"),
-        )
+        self.session_id = None
         self._emit(
             {
                 "kind": "action",
-                "action": "session_created",
-                "session_id": self.session_id,
+                "action": "plan_composed",
                 "moves": plan["moves"],
             }
         )
@@ -401,6 +408,7 @@ class FlowResetAgent:
         )
 
         summary = result["summary"]
+        self.session_id = None
         return {
             "type": "coach",
             "text": self._closing_line(response),

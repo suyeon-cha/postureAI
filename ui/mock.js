@@ -54,6 +54,47 @@ const LABELS = {
   general: "General reset",
 };
 
+const SOURCE_OSHA = {
+  organization: "U.S. Occupational Safety and Health Administration",
+  title: "Computer Workstations: Hazards and Solutions",
+  url: "https://www.osha.gov/computer-workstations/hazards-solutions",
+};
+const SOURCE_AOA = {
+  organization: "American Optometric Association",
+  title: "Computer Vision Syndrome",
+  url: "https://www.aoa.org/healthy-eyes/eye-and-vision-conditions/computer-vision-syndrome?sso=y",
+};
+const TOPIC_META = {
+  neck_shoulders: ["Neck and shoulder reset", "A short movement break interrupts prolonged static desk posture.", "Body pose", "MediaPipe PoseLandmarker", ["Shoulders and head are visible", "Movement pace", "Comfortable movement range", "Excessive trunk movement"], "The camera cannot diagnose neck or shoulder conditions.", [SOURCE_OSHA]],
+  back_hips: ["Back and hip reset", "Changing position and using a short controlled movement can interrupt an extended seated period.", "Body pose", "MediaPipe PoseLandmarker", ["Torso and hips are visible", "Controlled pace", "Movement range", "Required full-body framing"], "The camera cannot identify the cause of back or hip discomfort.", [SOURCE_OSHA]],
+  legs_glutes: ["Leg and glute reset", "A brief movement changes loading after prolonged sitting.", "Full-body pose", "MediaPipe PoseLandmarker", ["Hips, knees, and feet are visible", "Repetition count", "Movement pace", "Selected alignment signals"], "This is not a clinical gait or joint assessment.", [SOURCE_OSHA]],
+  wrists_hands: ["Wrist and hand reset", "A brief change from keyboard activity can break up repetitive hand use.", "Local vision check", "Qwen2.5-VL via the local agent", ["Hands and wrists are visible", "Movement matches the selected reset", "Movement appears slow and controlled"], "The MVP does not calculate clinical wrist angles.", [SOURCE_OSHA]],
+  tired_eyes: ["Screen-rest reset", "Looking away from a near screen provides a deliberate pause from sustained near work.", "Local vision check", "Qwen2.5-VL via the local agent", ["Face is visible before the reset", "Attention turns away from the screen", "The interval is completed"], "The camera cannot diagnose eye strain or myopia.", [SOURCE_AOA]],
+  general: ["General desk reset", "A short guided change of position reduces the friction of choosing a desk break.", "Body pose", "MediaPipe PoseLandmarker", ["Required landmarks are visible", "Movement pace", "Routine completion"], "FlowReset provides general movement awareness only.", [SOURCE_OSHA]],
+};
+const KNOWLEDGE = {
+  version: 1,
+  review_status: "hackathon_general_wellness",
+  reviewed_at: "2026-07-26",
+  audience: "Adults 18+",
+  boundary: "General workplace-wellness guidance only; not diagnosis or treatment.",
+  topics: Object.entries(TOPIC_META).map(([area, value]) => ({
+    area, title: value[0], rationale: value[1],
+    camera: { mode: value[2], model: value[3], checks: value[4], limitation: value[5] },
+    sources: value[6], review_status: "hackathon_general_wellness", reviewed_at: "2026-07-26",
+  })),
+  privacy: {
+    title: "Private local processing",
+    rationale: "Camera data is processed on the GB10 so raw frames do not leave the workplace or need to be retained.",
+    retention: {
+      raw_frames: "Memory only; discarded immediately after local inference",
+      landmarks: "Session only",
+      personal_history: "90-day rolling default",
+      employer_reporting: "Aggregate, opted-in cohorts of 10 or more",
+    },
+  },
+};
+
 const CUES = [
   "Relax your shoulders as you roll back.",
   "Slow it down — four seconds per circle.",
@@ -188,6 +229,7 @@ export class MockBackend {
       // Every category offers camera participation. For eye resets, the camera
       // confirms looking away/completion rather than diagnosing vision or gaze.
       camera_useful: true,
+      knowledge: KNOWLEDGE.topics.find((topic) => topic.area === symptom),
       needs_full_body: moves.some((k) => STANDING_ONLY.includes(k)),
       avoided: [],
     };
@@ -223,6 +265,7 @@ export class MockBackend {
       camera: !!msg.camera,
       paused: false,
       rep: 0,
+      lastVideoCheck: 0,
     };
     this.cueIndex = 0;
     this._emit({ type: "session_started", plan: this.plan, camera_on: this.session.camera });
@@ -282,6 +325,18 @@ export class MockBackend {
       this._emit({ type: "coach", text: CUES[this.cueIndex++ % CUES.length], speak: this.prefs.voice, routine: null });
       this._trace({ kind: "tool", name: "generate_coaching_cue", arguments: { move: key }, result: { source: "pace" } });
     }
+    if (this.session.camera && this.session.moveElapsed > 5 &&
+        this.session.moveElapsed - this.session.lastVideoCheck > 8) {
+      this.session.lastVideoCheck = this.session.moveElapsed;
+      this._emit({
+        type: "video_ai",
+        status: "ready",
+        move: key,
+        text: "Preview check: the relevant movement is visible. Continue slowly and comfortably.",
+      });
+      this._trace({ kind: "tool", name: "look_at_frame", arguments: { move: key },
+        result: { local_preview: true, visible: true } });
+    }
 
     if (this.session.moveElapsed >= spec.seconds) this._advance();
 
@@ -313,6 +368,7 @@ export class MockBackend {
     this._emit({ type: "coach", text: `Good. That's ${MOVES[done].name} done.`, speak: this.prefs.voice, routine: null });
     this.session.index += 1;
     this.session.moveElapsed = 0;
+    this.session.lastVideoCheck = 0;
     if (this.session.index >= this.plan.moves.length) {
       this.session = null;
       this._emit({ type: "routine_complete" });
@@ -406,7 +462,7 @@ export class MockBackend {
         per_person_per_week: +(1.4 + r() * 2.2).toFixed(1),
       };
     });
-    const reported = teams.filter((t) => t.participants >= 5);
+    const reported = teams.filter((t) => t.participants >= 10);
     const participants = reported.reduce((a, t) => a + t.participants, 0);
     const sessions = reported.reduce((a, t) => a + t.sessions, 0);
     const completed = Math.round(sessions * 0.79);
@@ -414,7 +470,7 @@ export class MockBackend {
       workspace: {
         suppressed: false,
         days: 30,
-        k_anonymity: 5,
+        k_anonymity: 10,
         participants,
         sessions_started: sessions,
         sessions_completed: completed,
@@ -443,7 +499,7 @@ export class MockBackend {
     return {
       preview: true,
       llm: { endpoint: "preview", local: false, reachable: false, reason_model: "qwen3:8b", vision_model: "qwen2.5vl:7b" },
-      runtime: { runtime: "preview", tools: ["get_user_context", "get_reset_history", "select_approved_routine", "analyze_pose", "generate_coaching_cue", "record_session_result"] },
+      runtime: { runtime: "preview", tools: ["get_user_context", "get_reset_history", "retrieve_wellness_guidance", "select_approved_routine", "analyze_pose", "generate_coaching_cue", "record_session_result"] },
       pose: { model: "MediaPipe PoseLandmarker (heavy)", available: false, frames_stored: 0 },
       tts: { engine: "Piper (local)", available: false },
       stt: { engine: "faster-whisper (local)", available: false, audio_stored: 0 },
@@ -453,5 +509,9 @@ export class MockBackend {
 
   routines() {
     return { moves: MOVES, symptoms: LABELS, durations: [1, 2, 3, 5, 10] };
+  }
+
+  knowledge() {
+    return KNOWLEDGE;
   }
 }

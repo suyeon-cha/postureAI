@@ -1,0 +1,89 @@
+version: 1
+review_status: hackathon_general_wellness
+reviewed_at: "2026-07-26"
+audience: "Adults 18+"
+boundary: "General workplace-wellness guidance only; not diagnosis or treatment."
+
+sources:
+  osha_checklist:
+    organization: "U.S. Occupational Safety and Health Administration"
+    title: "Computer Workstations Checklist"
+    url: "https://www.osha.gov/etools/computer-workstations/checklists"
+  osha_hazards:
+    organization: "U.S. Occupational Safety and Health Administration"
+    title: "Computer Workstations: Hazards and Solutions"
+    url: "https://www.osha.gov/computer-workstations/hazards-solutions"
+  aoa_cvs:
+    organization: "American Optometric Association"
+    title: "Computer Vision Syndrome"
+    url: "https://www.aoa.org/healthy-eyes/eye-and-vision-conditions/computer-vision-syndrome?sso=y"
+  ftc_health_apps:
+    organization: "U.S. Federal Trade Commission"
+    title: "Mobile Health App Developers: Best Practices"
+    url: "https://www.ftc.gov/business-guidance/resources/mobile-health-app-developers-ftc-best-practices"
+
+topics:
+  neck_shoulders:
+    title: "Neck and shoulder reset"
+    rationale: "A short movement break interrupts prolonged static desk posture and creates a low-friction opportunity to change position."
+    camera:
+      mode: "Body pose"
+      model: "MediaPipe PoseLandmarker"
+      checks: ["Shoulders and head are visible", "Movement pace", "Comfortable movement range", "Excessive trunk movement"]
+      limitation: "The camera cannot diagnose neck or shoulder conditions or judge spinal structure."
+    source_ids: [osha_checklist, osha_hazards]
+  back_hips:
+    title: "Back and hip reset"
+    rationale: "Changing position and using a short controlled movement can interrupt an extended seated period."
+    camera:
+      mode: "Body pose"
+      model: "MediaPipe PoseLandmarker"
+      checks: ["Torso and hips are visible", "Controlled pace", "Movement range", "Required full-body framing"]
+      limitation: "The camera observes landmarks only and cannot identify the cause of back or hip discomfort."
+    source_ids: [osha_checklist, osha_hazards]
+  legs_glutes:
+    title: "Leg and glute reset"
+    rationale: "A brief standing or seated movement changes loading after prolonged sitting and adds movement to the workday."
+    camera:
+      mode: "Full-body pose"
+      model: "MediaPipe PoseLandmarker"
+      checks: ["Hips, knees, and feet are visible", "Repetition count", "Movement pace", "Selected alignment signals"]
+      limitation: "Landmark feedback is general movement guidance, not a clinical gait or joint assessment."
+    source_ids: [osha_checklist, osha_hazards]
+  wrists_hands:
+    title: "Wrist and hand reset"
+    rationale: "A brief change from keyboard and pointing-device activity can break up repetitive hand use."
+    camera:
+      mode: "Local vision check"
+      model: "Qwen2.5-VL via the local agent"
+      checks: ["Hands and wrists are visible", "Movement matches the selected reset", "Movement appears slow and controlled"]
+      limitation: "The MVP does not calculate clinical wrist angles or detect repetitive-strain injury."
+    source_ids: [osha_checklist, osha_hazards]
+  tired_eyes:
+    title: "Screen-rest reset"
+    rationale: "Looking away from a near screen and changing visual focus provides a deliberate pause from sustained near work."
+    camera:
+      mode: "Local vision check"
+      model: "Qwen2.5-VL via the local agent"
+      checks: ["Face is visible before the reset", "Attention turns away from the screen", "The reset interval is completed"]
+      limitation: "The camera cannot diagnose eye strain or myopia, measure visual acuity, or reliably verify viewing distance."
+    source_ids: [aoa_cvs]
+  general:
+    title: "General desk reset"
+    rationale: "A short guided change of position reduces the friction of deciding what to do during a desk break."
+    camera:
+      mode: "Body pose"
+      model: "MediaPipe PoseLandmarker"
+      checks: ["Required landmarks are visible", "Movement pace", "Routine completion"]
+      limitation: "FlowReset provides general movement awareness only."
+    source_ids: [osha_hazards]
+
+privacy:
+  title: "Private local processing"
+  rationale: "Health-adjacent camera data is processed on the GB10 so raw frames do not need to leave the workplace or be retained."
+  source_ids: [ftc_health_apps]
+  retention:
+    raw_frames: "Memory only; discarded immediately after local inference"
+    landmarks: "Session only"
+    personal_history: "90-day rolling default"
+    employer_reporting: "Aggregate, opted-in cohorts of 10 or more"

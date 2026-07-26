@@ -51,8 +51,10 @@ const NAV = [
   { key: "welcome", label: "Overview" },
   { key: "home", label: "New reset" },
   { key: "dashboard", label: "My progress" },
+  { key: "knowledge", label: "Wellness library" },
   { key: "workspace", label: "Team insights" },
   { key: "settings", label: "Settings" },
+  { key: "help", label: "Help" },
 ];
 
 // ─────────────────────────────── state ───────────────────────────────
@@ -88,10 +90,12 @@ const S = {
   planning: false,
   dashboard: null,
   workspace: null,
+  knowledge: null,
   trace: [],
   completed: false,
   response: null,
   insight: null,
+  videoStatus: null,
   onboarded: localStorage.getItem("flowreset.onboarded") === "1",
 };
 
@@ -99,6 +103,8 @@ let socket = null;
 let mock = null;
 let videoStream = null;
 let frameTimer = null;
+let planningTimer = null;
+let toastTimer = null;
 
 // ─────────────────────────── transport ───────────────────────────
 
@@ -132,15 +138,21 @@ async function boot() {
   if (opened) {
     S.connected = true;
     socket.addEventListener("message", (e) => handle(JSON.parse(e.data)));
-    socket.addEventListener("close", () => { S.connected = false; renderBadge(); });
-    const [health, prefs, dash] = await Promise.all([
+    socket.addEventListener("close", () => {
+      S.connected = false;
+      renderBadge();
+      showToast("Connection to the local AI was lost. Your camera is no longer sending frames.", "error");
+    });
+    const [health, prefs, dash, knowledge] = await Promise.all([
       fetch("/api/health").then((r) => r.json()).catch(() => null),
       fetch("/api/prefs").then((r) => r.json()).catch(() => null),
       fetch("/api/dashboard").then((r) => r.json()).catch(() => null),
+      fetch("/api/knowledge").then((r) => r.json()).catch(() => null),
     ]);
     if (health) S.health = health;
     if (prefs) S.prefs = { ...S.prefs, ...prefs };
     if (dash) S.dashboard = dash;
+    if (knowledge) S.knowledge = knowledge;
   } else {
     socket = null;
     S.preview = true;
@@ -148,6 +160,7 @@ async function boot() {
     S.health = mock.health();
     S.dashboard = mock.dashboard();
     S.workspace = mock.workspace();
+    S.knowledge = mock.knowledge();
   }
 
   S.intake.duration_min = S.prefs.preferred_duration_min;
@@ -174,6 +187,8 @@ function handle(msg) {
 
     case "coach":
       if (msg.plan) {
+        if (!S.planning) break;
+        clearPlanningTimer();
         S.plan = msg.plan;
         S.why = msg.why || [];
         S.coachText = msg.text;
@@ -185,6 +200,7 @@ function handle(msg) {
         S.coachText = msg.text;
         if (S.screen === "complete") render();
       } else if (msg.escalate) {
+        clearPlanningTimer();
         S.planning = false;
         S.coachText = msg.text;
         S.screen = "escalate";
@@ -193,6 +209,13 @@ function handle(msg) {
         S.cue = msg.text;
         if (S.screen === "session") paintCue();
       }
+      break;
+
+    case "error":
+      clearPlanningTimer();
+      S.planning = false;
+      showToast(humanizeError(msg), "error");
+      if (S.screen === "home") restorePlanControls();
       break;
 
     case "session_started":
@@ -222,7 +245,41 @@ function handle(msg) {
     case "audio":
       if (S.prefs.voice) new Audio(`data:audio/wav;base64,${msg.wav_b64}`).play().catch(() => {});
       break;
+
+    case "video_ai":
+      S.videoStatus = msg;
+      if (S.screen === "session") {
+        S.cue = msg.text;
+        paintCue();
+        paintVideoStatus();
+      }
+      break;
   }
+}
+
+function humanizeError(msg) {
+  if (msg.where === "state_loop") {
+    return "Video guidance paused because the local camera analyzer stopped responding. Continue by timer or restart the app.";
+  }
+  if (msg.where === "agent_loop") {
+    return "The local coach could not complete that step. Try the reset again or continue without camera guidance.";
+  }
+  return "FlowReset could not complete that action. Please try again.";
+}
+
+function showToast(message, kind = "status") {
+  const region = $("#toastRegion");
+  if (!region) return;
+  clearTimeout(toastTimer);
+  region.innerHTML = "";
+  const toast = el(`<div class="toast" data-kind="${esc(kind)}" role="${kind === "error" ? "alert" : "status"}">
+    <span class="toast-icon" aria-hidden="true">${kind === "error" ? "!" : "✓"}</span>
+    <span>${esc(message)}</span>
+    <button class="ghost" type="button" aria-label="Dismiss message">✕</button>
+  </div>`);
+  $("button", toast).addEventListener("click", () => { region.innerHTML = ""; });
+  region.append(toast);
+  toastTimer = setTimeout(() => { region.innerHTML = ""; }, kind === "error" ? 9000 : 4500);
 }
 
 // ─────────────────────────── chrome ───────────────────────────
@@ -237,6 +294,7 @@ function renderNav() {
   });
   $("#brandHome").addEventListener("click", (e) => {
     e.preventDefault();
+    if (S.screen === "session") return;
     go(S.onboarded ? "home" : "welcome");
   });
   markNav();
@@ -245,10 +303,11 @@ function renderNav() {
 function markNav() {
   // The site nav is always available — it's a website, not a wizard. Before
   // onboarding, only the pages that make sense without preferences show.
-  const open = S.onboarded ? NAV.map((n) => n.key) : ["welcome", "workspace"];
+  const open = S.onboarded ? NAV.map((n) => n.key) : ["welcome", "knowledge", "workspace", "help"];
   [...$("#nav").children].forEach((b, i) => {
     const key = NAV[i].key;
     b.hidden = !open.includes(key);
+    b.disabled = S.screen === "session";
     if (key === S.screen) b.setAttribute("aria-current", "page");
     else b.removeAttribute("aria-current");
   });
@@ -331,6 +390,7 @@ function appendTrace(entry) {
 function go(screen) {
   if (screen === "workspace" && !S.workspace) loadWorkspace();
   if (screen === "dashboard" && !S.dashboard) loadDashboard();
+  if (screen === "knowledge" && !S.knowledge) loadKnowledge();
   S.screen = screen;
   render();
 }
@@ -343,6 +403,12 @@ async function loadDashboard() {
 async function loadWorkspace() {
   if (mock) { S.workspace = mock.workspace(); render(); return; }
   S.workspace = await fetch("/api/workspace").then((r) => r.json()).catch(() => null);
+  render();
+}
+
+async function loadKnowledge() {
+  if (mock) { S.knowledge = mock.knowledge(); render(); return; }
+  S.knowledge = await fetch("/api/knowledge").then((r) => r.json()).catch(() => null);
   render();
 }
 
@@ -364,8 +430,10 @@ function render() {
     complete: viewComplete,
     escalate: viewEscalate,
     dashboard: viewDashboard,
+    knowledge: viewKnowledge,
     workspace: viewWorkspace,
     settings: viewSettings,
+    help: viewHelp,
   }[S.screen];
   app.append(view());
   if (S.screen === "session") { paintSession(); paintCue(); }
@@ -522,7 +590,10 @@ function viewGoals() {
       <h1>What would you like out of this?</h1>
       <p class="muted">This shapes what FlowReset offers first. You can change it later.</p></div>
     <div class="grid option-grid" id="goals"></div>
-    <div class="row"><button class="btn" id="next">Continue</button></div>
+    <div class="row">
+      <button class="btn secondary" id="back">Back</button>
+      <button class="btn" id="next">Continue</button>
+    </div>
   </div>`);
   GOALS.forEach((g) => {
     const b = el(`<button class="option" type="button" aria-pressed="${S.prefs.goal === g.key}">
@@ -534,6 +605,7 @@ function viewGoals() {
     });
     $("#goals", wrap).append(b);
   });
+  $("#back", wrap).addEventListener("click", () => go("welcome"));
   $("#next", wrap).addEventListener("click", () => go("prefs"));
   return wrap;
 }
@@ -567,7 +639,10 @@ function viewPrefs() {
         </div>
       </div>
     </div>
-    <div class="row"><button class="btn" id="done">Start using FlowReset</button></div>
+    <div class="row">
+      <button class="btn secondary" id="back">Back</button>
+      <button class="btn" id="done">Start using FlowReset</button>
+    </div>
   </div>`);
 
   SYMPTOM_CARDS.forEach((s) => {
@@ -615,6 +690,7 @@ function viewPrefs() {
 
   bindMic($("#mic", wrap), $("#concerns", wrap), $("#micStatus", wrap));
 
+  $("#back", wrap).addEventListener("click", () => go("goals"));
   $("#done", wrap).addEventListener("click", () => {
     S.prefs.concerns = $("#concerns", wrap).value.trim();
     finishOnboarding();
@@ -684,7 +760,9 @@ function viewHome() {
         </div>
         <div class="selection-summary" id="selectionSummary" aria-live="polite"></div>
         <button class="btn wide" id="ask">Build my reset</button>
+        <button class="btn subtle wide" id="cancelPlan" hidden>Cancel</button>
         <p class="tiny muted" id="hint">The local agent uses your preferences and approved exercises.</p>
+        <p class="tiny muted">Keyboard shortcut: Ctrl/⌘ + Enter</p>
       </aside>
     </div>
 
@@ -755,6 +833,12 @@ function viewHome() {
     requestPlan(text || fallback);
   };
   $("#ask", wrap).addEventListener("click", ask);
+  $("#cancelPlan", wrap).addEventListener("click", () => {
+    S.planning = false;
+    clearPlanningTimer();
+    restorePlanControls();
+    showToast("Plan request cancelled. Nothing was started.", "status");
+  });
   $("#req", wrap).addEventListener("keydown", (e) => {
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) ask();
   });
@@ -764,23 +848,49 @@ function viewHome() {
 }
 
 function requestPlan(text) {
+  if (S.planning) return;
   S.planning = true;
   S.trace = [];
   $("#traceList").innerHTML = "";
   const hint = $("#hint");
   if (hint) hint.textContent = "Thinking on the box…";
   const btn = $("#ask");
-  if (btn) { btn.disabled = true; btn.textContent = "Working…"; }
+  if (btn) { btn.disabled = true; btn.textContent = "Building your reset…"; }
+  const cancel = $("#cancelPlan");
+  if (cancel) cancel.hidden = false;
   const override = {};
   if (S.intake.touched.symptom && S.intake.symptom) override.symptom = S.intake.symptom;
   if (S.intake.touched.duration) override.duration_min = S.intake.duration_min;
   if (S.intake.touched.stand) override.can_stand = S.intake.can_stand;
 
   send({ type: "intake", text, override: Object.keys(override).length ? override : undefined });
+  clearPlanningTimer();
+  planningTimer = setTimeout(() => {
+    if (!S.planning || S.screen !== "home") return;
+    S.planning = false;
+    restorePlanControls();
+    showToast("The local AI is taking longer than expected. Check that the model is running, then try again.", "error");
+  }, 20000);
+}
+
+function clearPlanningTimer() {
+  if (planningTimer) clearTimeout(planningTimer);
+  planningTimer = null;
+}
+
+function restorePlanControls() {
+  const btn = $("#ask");
+  if (btn) { btn.disabled = false; btn.textContent = "Build my reset"; }
+  const cancel = $("#cancelPlan");
+  if (cancel) cancel.hidden = true;
+  const hint = $("#hint");
+  if (hint) hint.textContent = "The local agent uses your preferences and approved exercises.";
 }
 
 function viewPlan() {
   const p = S.plan;
+  const kb = p.knowledge || S.knowledge?.topics?.find((t) => t.area === p.symptom);
+  const camera = kb?.camera;
   const lib = mock ? mock.routines().moves : null;
   const name = (k) => lib?.[k]?.name || k.replace(/_/g, " ");
   const secs = (k) => lib?.[k]?.seconds || null;
@@ -800,12 +910,28 @@ function viewPlan() {
           ${secs(k) ? `<span class="dur">${secs(k)}s</span>` : ""}</li>`).join("")}
       </ol>
 
+      ${camera ? `<section class="video-ai-plan">
+        <div class="video-ai-head">
+          <div><span class="eyebrow">Video AI coach</span>
+            <h2>${esc(camera.mode)}</h2></div>
+          <span class="pill good">Runs locally</span>
+        </div>
+        <p class="small muted">${esc(camera.model)} checks:</p>
+        <div class="check-grid">${camera.checks.map((check) =>
+          `<span><i>✓</i>${esc(check)}</span>`).join("")}</div>
+        <p class="tiny muted">${esc(camera.limitation)}</p>
+      </section>` : ""}
+
       ${S.why.length ? `<details class="why">
         <summary><strong class="small">Why this reset?</strong>
           <span class="tiny">Personalization, camera checks, and privacy</span></summary>
         <ul>${S.why.map((w) => `<li>${esc(w)}</li>`).join("")}</ul>
+        ${kb?.rationale ? `<p class="small why-rationale">${esc(kb.rationale)}</p>` : ""}
+        ${kb?.sources?.length ? `<div class="source-list">${kb.sources.map((source) =>
+          `<a href="${esc(source.url)}" target="_blank" rel="noreferrer">
+            <span>${esc(source.organization)}</span><strong>${esc(source.title)}</strong></a>`).join("")}</div>` : ""}
         <p class="tiny why-boundary">FlowReset provides general workplace-wellness guidance,
-          not diagnosis or treatment.</p></details>` : ""}
+          not diagnosis or treatment. Content status: ${esc(kb?.review_status || "hackathon_general_wellness")}.</p></details>` : ""}
 
       <div class="stack-sm">
         <span class="eyebrow">Camera guidance</span>
@@ -831,6 +957,7 @@ async function beginSession(withCamera) {
   let camera = false;
   if (withCamera) camera = await startCamera();
   S.cameraOn = camera;
+  S.videoStatus = null;
   send({ type: "start_reset", camera, symptom: S.plan.symptom, duration_min: S.plan.duration_min, can_stand: S.intake.can_stand });
   S.screen = "session";
   render();
@@ -863,6 +990,11 @@ function viewSession() {
       </div>
 
       <div class="stack">
+        <div class="video-status" id="videoStatus" data-state="${S.cameraOn ? "scanning" : "off"}">
+          <span class="video-status-dot"></span>
+          <div><strong>${S.cameraOn ? "Video AI is finding your position" : "Video AI is off"}</strong>
+            <span>${S.cameraOn ? "Keep the relevant body area in frame." : "Timer and voice guidance remain available."}</span></div>
+        </div>
         <div class="cue-banner" id="cueBanner"></div>
         <div class="cam-wrap" id="camWrap">
           <video id="cam" autoplay muted playsinline></video>
@@ -902,6 +1034,7 @@ function viewSession() {
       $("#camOff", wrap).hidden = false;
     }
   });
+  paintVideoStatus();
   return wrap;
 }
 
@@ -939,15 +1072,41 @@ function paintSession() {
 
   const metrics = $("#metrics");
   if (metrics) {
+    const framingReady = S.framing !== "no_person" &&
+      (!p.needs_full_body || S.framing === "full_body");
     metrics.innerHTML = S.cameraOn
-      ? `<span class="pill">framing: ${esc(S.framing)}</span>
-         <span class="pill ${live.tempo === "good" ? "good" : "warn"}">tempo: ${esc(live.tempo)}</span>
-         <span class="pill">reps: ${live.rep}/${live.target_reps}</span>
-         <span class="pill ${live.form === "ok" ? "good" : "warn"}">form: ${esc(live.form)}</span>`
+      ? `<span class="pill ${framingReady ? "good" : "warn"}">${framingReady ? "In frame" : "Reposition camera"}</span>
+         <span class="pill ${live.tempo === "good" ? "good" : "warn"}">${live.tempo === "good" ? "Controlled pace" : "Slow down"}</span>
+         ${live.target_reps ? `<span class="pill">${live.rep}/${live.target_reps} completed</span>` : ""}
+         <span class="pill ${live.form === "ok" ? "good" : "warn"}">${live.form === "ok" ? "Movement visible" : "Check the coaching cue"}</span>`
       : `<span class="pill">Guidance: text and voice</span>`;
   }
 
   drawOverlay();
+  paintVideoStatus();
+}
+
+function paintVideoStatus() {
+  const box = $("#videoStatus");
+  if (!box) return;
+  if (!S.cameraOn) {
+    box.dataset.state = "off";
+    box.innerHTML = `<span class="video-status-dot"></span><div><strong>Video AI is off</strong>
+      <span>Timer and voice guidance remain available.</span></div>`;
+    return;
+  }
+  if (S.videoStatus) {
+    box.dataset.state = S.videoStatus.status;
+    box.innerHTML = `<span class="video-status-dot"></span><div><strong>Local video AI check</strong>
+      <span>${esc(S.videoStatus.text)}</span></div>`;
+    return;
+  }
+  const ready = S.framing !== "no_person" &&
+    (!S.plan?.needs_full_body || S.framing === "full_body");
+  box.dataset.state = ready ? "ready" : "scanning";
+  box.innerHTML = `<span class="video-status-dot"></span><div>
+    <strong>${ready ? "Video AI is ready" : "Video AI is finding your position"}</strong>
+    <span>${ready ? "Movement stays on the GB10 and frames are discarded." : "Keep the relevant body area in frame."}</span></div>`;
 }
 
 function paintCue() {
@@ -1154,6 +1313,139 @@ function viewDashboard() {
   return wrap;
 }
 
+function viewKnowledge() {
+  const kb = S.knowledge;
+  if (!kb) {
+    loadKnowledge();
+    return el(`<div class="notice">Loading the approved wellness library…</div>`);
+  }
+  const wrap = el(`<div class="stack">
+    <div class="library-hero card">
+      <div class="stack-sm">
+        <div class="row"><span class="pill good">Approved MVP content</span>
+          <span class="pill">Version ${esc(kb.version)}</span>
+          <span class="pill">Reviewed ${esc(kb.reviewed_at)}</span></div>
+        <h1>Employee wellness library</h1>
+        <p class="hero-lede">This is the source-grounded content FlowReset retrieves when it
+          explains a recommendation. Personal employee history is stored separately and is
+          never added to this shared library.</p>
+        <div class="row">
+          <a class="btn secondary link-btn"
+            href="https://github.com/suyeon-cha/postureAI/blob/feat/flowreset-app/FLOWRESET_KNOWLEDGE_BASE.md"
+            target="_blank" rel="noreferrer">Read the governance specification ↗</a>
+        </div>
+      </div>
+      <div class="library-boundary"><span class="eyebrow">Product boundary</span>
+        <strong>${esc(kb.audience)}</strong><p class="small">${esc(kb.boundary)}</p></div>
+    </div>
+
+    <div class="grid library-grid">
+      ${kb.topics.map((topic) => `<article class="card library-topic stack-sm">
+        <div class="row"><span class="library-icon">${topic.area === "tired_eyes" ? "◉" :
+          topic.area === "wrists_hands" ? "⌁" : "◇"}</span>
+          <div><span class="eyebrow">${esc(topic.camera.mode)}</span>
+            <h2>${esc(topic.title)}</h2></div></div>
+        <p class="small muted">${esc(topic.rationale)}</p>
+        <details><summary>What video AI checks</summary>
+          <ul>${topic.camera.checks.map((check) => `<li>${esc(check)}</li>`).join("")}</ul>
+          <p class="tiny muted">${esc(topic.camera.limitation)}</p></details>
+        <div class="topic-sources">${topic.sources.map((source) =>
+          `<a href="${esc(source.url)}" target="_blank" rel="noreferrer">
+            ${esc(source.organization)} · ${esc(source.title)} ↗</a>`).join("")}</div>
+      </article>`).join("")}
+    </div>
+
+    <div class="card privacy-architecture">
+      <div class="stack-sm"><span class="eyebrow">Local data architecture</span>
+        <h2>${esc(kb.privacy.title)}</h2><p class="small muted">${esc(kb.privacy.rationale)}</p></div>
+      <div class="retention-grid">
+        ${Object.entries(kb.privacy.retention).map(([key, value]) =>
+          `<div><span>${esc(key.replace(/_/g, " "))}</span><strong>${esc(value)}</strong></div>`).join("")}
+      </div>
+    </div>
+  </div>`);
+  return wrap;
+}
+
+function viewHelp() {
+  const wrap = el(`<div class="stack">
+    <div class="stack-sm measure">
+      <span class="eyebrow">Help &amp; safety</span>
+      <h1>What do you need help with?</h1>
+      <p class="muted">Short, task-focused answers for completing a reset or fixing a problem.</p>
+    </div>
+
+    <div class="grid help-grid">
+      <section class="card stack-sm">
+        <h2>Take a reset</h2>
+        <ol class="help-steps">
+          <li>Choose the area that needs attention.</li>
+          <li>Confirm your time and whether you can stand.</li>
+          <li>Review the plan, then start with or without camera guidance.</li>
+          <li>Finish with Better, Same, or Worse so the next plan adapts.</li>
+        </ol>
+        <button class="btn" id="helpReset">Start a new reset</button>
+      </section>
+
+      <section class="card stack-sm">
+        <h2>The camera cannot see me</h2>
+        <ul class="help-steps">
+          <li>Allow camera access in the browser.</li>
+          <li>Use even lighting and keep the requested body area visible.</li>
+          <li>For standing movements, step back until feet and knees are in frame.</li>
+          <li>If it still fails, continue by timer—camera guidance is optional.</li>
+        </ul>
+      </section>
+
+      <section class="card stack-sm">
+        <h2>Local AI is unavailable</h2>
+        <ul class="help-steps">
+          <li>Check the status badge at the top of the page.</li>
+          <li>Confirm the GB10 app and local models are running.</li>
+          <li>Reconnect the secure tunnel, then reload this page.</li>
+          <li>Your camera stops sending frames when the connection closes.</li>
+        </ul>
+      </section>
+
+      <section class="card stack-sm">
+        <h2>Stop or change a reset</h2>
+        <p class="small muted">Use Pause, Skip move, or End at any time. Before starting,
+          choose Change request to return to the check-in without saving a session.</p>
+        <p class="small muted">Stop for sharp or worsening pain, dizziness, numbness,
+          weakness, breathing difficulty, chest pain, or loss of balance.</p>
+      </section>
+
+      <section class="card stack-sm">
+        <h2>Privacy controls</h2>
+        <p class="small muted">Camera guidance is optional. Raw frames are processed in
+          memory on the GB10 and discarded. Employer reporting contains opted-in aggregate
+          totals only for groups of at least 10.</p>
+        <button class="btn secondary" id="helpSettings">Open privacy settings</button>
+      </section>
+
+      <section class="card stack-sm">
+        <h2>Why was this recommended?</h2>
+        <p class="small muted">Open <strong>Why this reset?</strong> on the plan screen to
+          see personalization, camera limitations, review status, and supporting sources.</p>
+        <button class="btn secondary" id="helpLibrary">Open wellness library</button>
+      </section>
+    </div>
+
+    <div class="notice small"><strong>Keyboard shortcut:</strong>
+      Ctrl/⌘ + Enter builds a reset from the check-in text box.</div>
+  </div>`);
+  $("#helpReset", wrap).addEventListener("click", () => {
+    if (!S.onboarded) finishOnboarding();
+    else go("home");
+  });
+  $("#helpSettings", wrap).addEventListener("click", () => {
+    if (!S.onboarded) finishOnboarding();
+    go("settings");
+  });
+  $("#helpLibrary", wrap).addEventListener("click", () => go("knowledge"));
+  return wrap;
+}
+
 function viewWorkspace() {
   const payload = S.workspace;
   if (!payload) { loadWorkspace(); return el(`<div class="notice">Loading workspace view…</div>`); }
@@ -1309,22 +1601,37 @@ function viewSettings() {
   toggle("ws", "workspace_opt_in");
 
   $("#export", wrap).addEventListener("click", async () => {
-    const data = mock ? { prefs: S.prefs, sessions: mock.sessions } :
-      await fetch("/api/export").then((r) => r.json());
-    const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }));
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "flowreset-export.json";
-    a.click();
-    URL.revokeObjectURL(url);
+    try {
+      const data = mock ? { prefs: S.prefs, sessions: mock.sessions } :
+        await fetch("/api/export").then((r) => {
+          if (!r.ok) throw new Error("export failed");
+          return r.json();
+        });
+      const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "flowreset-export.json";
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast("Your FlowReset data export is ready.", "status");
+    } catch {
+      showToast("FlowReset could not export your data. Check the local connection and try again.", "error");
+    }
   });
 
   $("#wipe", wrap).addEventListener("click", async () => {
     if (!confirm("Delete all local FlowReset history? This cannot be undone.")) return;
     if (mock) mock.sessions = [];
-    else await fetch("/api/history", { method: "DELETE" }).catch(() => {});
+    else {
+      const response = await fetch("/api/history", { method: "DELETE" }).catch(() => null);
+      if (!response?.ok) {
+        showToast("FlowReset could not delete the history. Check the local connection and try again.", "error");
+        return;
+      }
+    }
     S.dashboard = null;
     await loadDashboard();
+    showToast("Local session history deleted.", "status");
     go("dashboard");
   });
 
