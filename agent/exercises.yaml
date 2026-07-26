@@ -1,16 +1,96 @@
-# FlowReset exercise library — lane 2 owns this file.
-# Schema: see contracts.md. One example entry below; library is written at the event.
-# Planned: neck_side_stretch, shoulder_rolls, y_raise, seated_twist, chin_tuck,
-#          cat_cow, chest_opener, trap_stretch, hip_flexor_reset, wrist_stretch,
-#          squat, lunge
+# FlowReset exercise library v2 — agent lane owns this file.
+# detection: tempo | hold | reps | timer_only | yaw_check  (see contracts.md primitives)
+# Golden path = neck_shoulders. Build order: neck_shoulders -> wrists -> eyes -> back_hips.
 
-_example_squat:
-  name: "Bodyweight squat"
-  targets: [sitting, hips]
-  detection: reps
-  target_reps: 8
-  requires_full_body: true
-  cues:
-    setup: "Step back until I can see your ankles."
-    during: "Slow on the way down — four seconds."
-    fault_knee_valgus: "Knees are caving — push them out."
+cards:
+  neck_shoulders:
+    name: "Neck & Shoulders"
+    seated_ok: true
+    routine: [shoulder_rolls, neck_side_stretch, chest_opener]   # ~75s
+  back_hips:
+    name: "Back & Hips"
+    seated_ok: false
+    routine: [standing_cat_cow, hip_flexor_reset, slow_squats]   # ~90s, needs full body
+  wrists_hands:
+    name: "Wrists & Hands"
+    seated_ok: true
+    routine: [wrist_flexor_stretch, fist_to_fan, prayer_stretch] # ~60s, no camera needed
+  tired_eyes:
+    name: "Tired Eyes"
+    seated_ok: true
+    routine: [look_far_away, slow_blinks, palming]               # ~60s
+
+moves:
+  shoulder_rolls:
+    name: "Shoulder rolls"
+    detection: tempo
+    dose: { reps: 5, seconds: 20 }
+    cues:
+      during: "Four seconds per roll — feel the blades glide."
+      fault_too_fast: "Slower. Let the shoulders melt back."
+  neck_side_stretch:
+    name: "Neck side stretch"
+    detection: hold
+    dose: { hold_s: 15, per_side: true }
+    cues:
+      during: "Ear to shoulder. Breathe into the stretch."
+  chest_opener:
+    name: "Chest opener"
+    detection: hold
+    dose: { hold_s: 15 }
+    cues:
+      during: "Squeeze between the shoulder blades — that's the muscle waking up."
+
+  standing_cat_cow:
+    name: "Standing cat-cow"
+    detection: tempo
+    dose: { reps: 4, seconds: 25 }
+    cues:
+      during: "Round… then open. One vertebra at a time."
+  hip_flexor_reset:
+    name: "Hip flexor reset"
+    detection: hold
+    dose: { hold_s: 10, sets: 2 }
+    cues:
+      during: "Tuck, squeeze, reach tall — undo the chair."
+  slow_squats:
+    name: "Slow bodyweight squats"
+    detection: reps
+    dose: { reps: 6, seconds: 40 }
+    requires_full_body: true
+    cues:
+      setup: "Step back until I can see your ankles."
+      during: "Four seconds down."
+      fault_knee_valgus: "Knees are caving — push them out."
+
+  wrist_flexor_stretch:
+    name: "Wrist flexor stretch"
+    detection: timer_only
+    dose: { hold_s: 15, per_side: true }
+    cues: { during: "Arm long, fingers back, gentle pull." }
+  fist_to_fan:
+    name: "Fist to fan"
+    detection: timer_only
+    dose: { reps: 10 }
+    cues: { during: "Squeeze tight… then spread wide." }
+  prayer_stretch:
+    name: "Prayer stretch"
+    detection: timer_only
+    dose: { hold_s: 15 }
+    cues: { during: "Palms together, elbows wide, lower slowly." }
+
+  look_far_away:
+    name: "Look far away"
+    detection: yaw_check
+    dose: { hold_s: 20 }
+    cues: { during: "Find the farthest thing you can see. Stay there." }
+  slow_blinks:
+    name: "Slow blinks"
+    detection: timer_only
+    dose: { reps: 10 }
+    cues: { during: "Close… hold… open. Rewet the eyes." }
+  palming:
+    name: "Palming"
+    detection: timer_only
+    dose: { hold_s: 20 }
+    cues: { during: "Warm palms over closed eyes. Full dark." }

@@ -38,10 +38,34 @@ Change it only by team agreement — it's the constitution.**
 - **18:30** — demo video + submission deadline. CODE FREEZE.
 - **19:00** — deck deadline
 
-## Quickstart (on the box)
+## Run it (walking skeleton works today, on any machine)
 
 ```bash
-pip install -r requirements.txt
-# models come from the USB drive → ~/.ollama/models + pose_landmarker_heavy.task
-uvicorn server.main:app --host 0.0.0.0 --port 8000
+pip install fastapi 'uvicorn[standard]' pyyaml   # skeleton needs only these three
+uvicorn server.main:app --port 8000
 ```
+
+Open **http://localhost:8000** → pick a card → Start reset. You'll see the stub
+coach plan, a fake-keypoint canvas, the live session ticker, and the agent trace
+panel. Everything marked `[stub]` is a lane's job to replace (see contracts.md).
+
+Full install (event, on the box): `pip install -r requirements.txt`
+(adds mediapipe/opencv/piper). Models come from the USB → `~/.ollama/models`.
+
+### Hosting on the GB10 + viewing from the MacBook
+
+Browsers only allow the camera on secure origins, so **never open the UI via
+`http://<box-ip>`** — the webcam prompt will silently never appear. Instead:
+
+```bash
+# on the box
+uvicorn server.main:app --port 8000
+
+# on the MacBook — tunnel makes it localhost, which browsers trust
+ssh -L 8000:localhost:8000 dell@<box-ip>
+```
+
+Then open **http://localhost:8000** on the MacBook. Camera permission works,
+frames go through the tunnel to the box, and nothing is exposed to the venue
+network. If venue Wi-Fi blocks laptop↔box traffic (AP isolation), connect a
+direct ethernet cable and use its IP for the same ssh command.

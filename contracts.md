@@ -1,94 +1,76 @@
-# Contracts — the constitution
+# Contracts v2 — the constitution (FlowReset)
 
-Three JSON shapes cross lane boundaries. Build against these with fake data;
-never block on another lane. Changes require team agreement + a commit that
-updates this file AND both sides in the same PR.
+Messages cross one WebSocket: `ws://localhost:8000/ws`
+(on the event box, reach it via SSH tunnel: `ssh -L 8000:localhost:8000 dell@<gb10>` —
+browsers only allow camera on secure origins, and `localhost` counts. Never open
+the UI via `http://<ip>`.)
 
-## 1. `state` — perception → server → UI (WebSocket, ~15 Hz)
+UI is a pure renderer. Perception never phrases coaching. The agent never does geometry.
+All model calls go through the OpenClaw/NemoClaw agent → local Ollama. No cloud, ever.
 
-The UI is a pure renderer of this blob. Everything on screen comes from here.
+## 1. `state` — server → UI (~10–15 Hz)
 
 ```json
 {
   "type": "state",
-  "mode": "watch",                  // "watch" | "reset" | "idle"
-  "keypoints": [[0.51, 0.32, 0.9], ...],   // 33 × [x, y, visibility], normalized 0-1
-  "posture_debt": {                 // minutes of accumulated bad posture
-    "neck": 42.5,
-    "shoulders": 17.0,
-    "sitting": 96.0
+  "mode": "idle",                     // "idle" | "reset"
+  "keypoints": [[0.51, 0.32, 0.9]],   // 33 × [x, y, visibility] or null (camera off)
+  "session": {                        // null unless mode == "reset"
+    "card": "neck_shoulders",
+    "move": "shoulder_rolls",         // key into agent/exercises.yaml
+    "move_index": 0,
+    "rep": 2, "target_reps": 5,
+    "hold_s": 0,                      // >0 during holds
+    "form": "ok",                     // "ok" | "fault"
+    "tempo": "good",                  // "good" | "too_fast"
+    "remaining_s": 61
   },
-  "session": {                      // null when mode != "reset"
-    "move": "squat",                // key into agent/exercises.yaml
-    "move_index": 1,                // 0-based position in routine
-    "rep": 3,
-    "target_reps": 8,
-    "hold_seconds": 0,              // >0 during holds
-    "form": "ok",                   // "ok" | "fault" | "checking"  (checking = VLM judging)
-    "tempo": "good"                 // "good" | "too_fast"
-  },
-  "framing": "full_body"            // "full_body" | "torso_only" | "no_person"
+  "framing": "torso_only"             // "full_body" | "torso_only" | "no_person"
 }
 ```
 
-## 2. `event` — perception → agent (in-process queue)
-
-Events are edge-triggered facts. The agent decides what, if anything, to say.
-Perception NEVER phrases coaching language; the agent NEVER does geometry.
+## 2. UI → server (user actions)
 
 ```json
-{
-  "type": "debt_threshold",         // see catalog below
-  "move": "squat",                  // null in watch mode
-  "detail": "knee_valgus",
-  "value": 42.5,
-  "frame_jpeg_b64": null            // populated ONLY on vlm_check_needed
-}
+{ "type": "start_reset", "card": "neck_shoulders", "duration_s": 90, "seated": true }
+{ "type": "frame", "jpeg_b64": "..." }          // sampled webcam frames during reset only
+{ "type": "session_result", "feeling": "better" } // "better" | "same" | "worse"
+{ "type": "end_session" }
 ```
 
-Event catalog:
-
-| type | fired when | detail examples |
-|---|---|---|
-| `debt_threshold` | a posture_debt counter crosses its limit | "neck", "sitting" |
-| `rep_done` | rep state machine completes a rep | — |
-| `form_fault` | a rule fires during a move | "knee_valgus", "too_shallow", "rushing" |
-| `hold_complete` | stillness held for target duration | — |
-| `move_complete` | reps/holds for current move finished | — |
-| `vlm_check_needed` | rules can't judge this plane (chin tuck, squat depth) | includes frame |
-| `framing_lost` | required keypoints missing for current move | "need_ankles" |
-| `user_speech` | push-to-talk transcript ready (stretch goal) | transcript text |
-
-## 3. `coach` — agent → server → UI + TTS (WebSocket)
+## 3. `coach` — agent → server → UI
 
 ```json
 {
   "type": "coach",
-  "text": "Slower — feel your shoulder blades pull together.",
-  "speak": true,                    // server pipes to Piper when true
-  "routine": null                   // populated only when composing a new reset:
-  //  { "duration_min": 3, "moves": ["neck_side_stretch", "y_raise", "squat"] }
+  "text": "Third shoulder session this week — here's a quiet seated reset.",
+  "speak": false,                     // true → server pipes text to Piper
+  "routine": {                        // only when a new plan is composed
+    "duration_s": 75,
+    "moves": ["shoulder_rolls", "neck_side_stretch", "chest_opener"],
+    "why": "fits 90s, seated, targets your recurring shoulder tension"
+  },
+  "trace": [                          // judges' agent-loop proof, rendered in trace panel
+    { "tool": "get_reset_history", "result": "3 shoulder sessions this week" },
+    { "tool": "select_approved_routine", "result": "seated_shoulder_reset" }
+  ]
 }
 ```
 
-## Transport
+## Agent tools (implemented during the event, agent lane)
 
-- UI subscribes to `ws://<box>:8000/ws` — receives `state` and `coach` messages interleaved.
-- UI sends user actions on the same socket: `{"type": "start_reset", "duration_min": 3}`,
-  `{"type": "end_session"}`.
-- perception ↔ agent ↔ server are in-process (one FastAPI app, queues) — no network hops.
-
-## exercises.yaml schema (agent lane owns this file)
-
-```yaml
-squat:
-  name: "Bodyweight squat"
-  targets: [sitting, hips]
-  detection: reps          # reps | angle_hold | tempo | vlm_judge | timer_only
-  target_reps: 8
-  requires_full_body: true
-  cues:
-    setup: "Step back until I can see your ankles."
-    during: "Slow on the way down — four seconds."
-    fault_knee_valgus: "Knees are caving — push them out."
 ```
+get_user_context()                       -> goals, constraints, preferences
+get_reset_history()                      -> recent sessions + outcomes
+select_approved_routine(card, duration_s, seated) -> routine from exercises.yaml
+analyze_pose(landmarks_window)           -> {tempo, range, faults[]}   (deterministic)
+generate_coaching_cue(metrics)           -> one short cue (via local LLM)
+record_session_result(feeling)           -> persists to SQLite
+```
+
+Demo requirement: ≥3 tool calls visible in the trace during the golden path.
+
+## Detection primitives (perception lane) — only five exist
+
+tempo · hold · reps (state machine w/ hysteresis) · knee_valgus · framing/yaw check.
+Every move in exercises.yaml declares which primitive judges it (`detection:` field).

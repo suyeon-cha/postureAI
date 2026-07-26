@@ -1,10 +1,115 @@
 <!doctype html>
-<!-- FlowReset UI — lane 3.
-     Pure renderer of `state` + `coach` messages from ws://<box>:8000/ws.
-     Screens: onboarding (duration picker, camera/framing check),
-     live session (skeleton overlay, debt meter, rep counter, model sidebar),
-     EHS dashboard (end-of-day report). Built at the event. -->
+<!-- FlowReset UI — walking skeleton. Renders `state` + `coach` per contracts.md.
+     UI lane: replace this with the real screens; keep the message handling. -->
 <html>
-  <head><meta charset="utf-8"><title>FlowReset</title></head>
-  <body>FlowReset — built at the event.</body>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FlowReset</title>
+<style>
+  :root { --bg:#1c1a22; --card:#26232e; --ink:#efece6; --dim:#9a94a8; --accent:#9b8cff; --ok:#7fc98f; }
+  * { box-sizing:border-box; margin:0; }
+  body { background:var(--bg); color:var(--ink); font:16px/1.5 system-ui, sans-serif; padding:24px; }
+  .badge { display:inline-block; background:#233026; color:var(--ok); border:1px solid var(--ok);
+           border-radius:999px; padding:4px 14px; font-size:13px; margin-bottom:20px; }
+  h1 { font-size:22px; margin-bottom:4px; } .sub { color:var(--dim); margin-bottom:24px; }
+  .row { display:flex; gap:12px; flex-wrap:wrap; margin-bottom:16px; }
+  .card { background:var(--card); border:1px solid #363242; border-radius:14px; padding:16px 18px;
+          cursor:pointer; min-width:150px; }
+  .card:hover, .chip.on { border-color:var(--accent); }
+  .chip { background:var(--card); border:1px solid #363242; border-radius:999px; padding:6px 16px; cursor:pointer; }
+  button.go { background:var(--accent); color:#17141f; border:0; border-radius:10px;
+              padding:12px 28px; font-size:16px; font-weight:600; cursor:pointer; }
+  .panel { background:var(--card); border-radius:14px; padding:18px; margin-top:16px; }
+  #coach { min-height:48px; color:var(--ink); }
+  #trace { font:13px/1.6 ui-monospace, monospace; color:var(--dim); white-space:pre-wrap; }
+  canvas { background:#141218; border-radius:10px; width:100%; max-width:480px; }
+  .kv { color:var(--dim); font-size:14px; }
+  .hidden { display:none; }
+</style>
+</head>
+<body>
+  <span class="badge">● All AI local on GB10 · No external AI API</span>
+  <h1>FlowReset</h1>
+  <p class="sub">What feels uncomfortable? Pick a reset — camera stays off until you start.</p>
+
+  <div class="row" id="cards"></div>
+  <div class="row">
+    <span class="chip on" data-d="60">60s</span>
+    <span class="chip" data-d="90">90s</span>
+    <span class="chip" data-d="120">120s</span>
+    <span class="chip on" id="seated">seated</span>
+  </div>
+  <button class="go" id="start">Start reset</button>
+
+  <div class="panel">
+    <div id="coach">…</div>
+    <div class="kv" id="sessioninfo"></div>
+  </div>
+  <div class="panel" id="live" style="display:flex; gap:18px; align-items:flex-start;">
+    <canvas id="pose" width="480" height="360"></canvas>
+    <div style="flex:1">
+      <div class="kv">Agent trace (judges' view)</div>
+      <div id="trace">—</div>
+    </div>
+  </div>
+  <div class="panel hidden" id="feedback">
+    How do you feel?
+    <span class="chip" data-f="better">Better</span>
+    <span class="chip" data-f="same">Same</span>
+    <span class="chip" data-f="worse">Worse</span>
+  </div>
+
+<script>
+const CARDS = { neck_shoulders:"Neck & Shoulders", back_hips:"Back & Hips",
+                wrists_hands:"Wrists & Hands", tired_eyes:"Tired Eyes" };
+let card = "neck_shoulders", dur = 60;
+const $ = id => document.getElementById(id);
+
+for (const [k,v] of Object.entries(CARDS)) {
+  const d = document.createElement("div");
+  d.className = "card"; d.textContent = v; d.dataset.k = k;
+  d.onclick = () => { card = k; [...$("cards").children].forEach(c =>
+    c.style.borderColor = c.dataset.k === k ? "var(--accent)" : "#363242"); };
+  $("cards").appendChild(d);
+}
+$("cards").children[0].style.borderColor = "var(--accent)";
+document.querySelectorAll(".chip[data-d]").forEach(c => c.onclick = () => {
+  dur = +c.dataset.d;
+  document.querySelectorAll(".chip[data-d]").forEach(x => x.classList.toggle("on", x === c));
+});
+
+const ws = new WebSocket(`ws://${location.host}/ws`);
+ws.onmessage = e => {
+  const m = JSON.parse(e.data);
+  if (m.type === "coach") {
+    $("coach").textContent = m.text;
+    if (m.trace?.length) $("trace").textContent =
+      m.trace.map(t => `→ ${t.tool}()  ${t.result}`).join("\n");
+    if (m.text.includes("Better")) $("feedback").classList.remove("hidden");
+  }
+  if (m.type === "state") {
+    draw(m.keypoints);
+    $("sessioninfo").textContent = m.session
+      ? `${m.session.move} · move ${m.session.move_index+1} · ${m.session.remaining_s}s left · form ${m.session.form}`
+      : "";
+  }
+};
+$("start").onclick = () => { $("feedback").classList.add("hidden");
+  ws.send(JSON.stringify({type:"start_reset", card, duration_s:dur, seated:true})); };
+document.querySelectorAll(".chip[data-f]").forEach(c => c.onclick = () => {
+  ws.send(JSON.stringify({type:"session_result", feeling:c.dataset.f}));
+  $("feedback").classList.add("hidden");
+});
+
+const ctx = $("pose").getContext("2d");
+function draw(kps) {
+  ctx.clearRect(0,0,480,360);
+  if (!kps) { ctx.fillStyle = "#4a4556"; ctx.font = "14px system-ui";
+    ctx.fillText("camera off — private by default", 150, 185); return; }
+  ctx.fillStyle = "#9b8cff";
+  for (const [x,y] of kps) { ctx.beginPath(); ctx.arc(x*480, y*360, 4, 0, 7); ctx.fill(); }
+}
+</script>
+</body>
 </html>
