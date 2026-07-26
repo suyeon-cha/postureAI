@@ -579,6 +579,47 @@ textarea::placeholder { color: var(--ink-3); }
 .stat .num { font-size: 1.85rem; font-weight: 300; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
 .stat .lbl { color: var(--ink-2); font-size: 0.85rem; }
 
+.insight-hero {
+  display: flex; align-items: center; justify-content: space-between; gap: 24px;
+  background: linear-gradient(135deg, var(--accent-soft), var(--surface) 68%);
+  border-color: color-mix(in srgb, var(--accent) 26%, var(--line));
+}
+.insight-hero > :first-child { max-width: 68ch; }
+.insight-action { align-items: flex-end; flex: none; }
+.insight-grid {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px; align-items: stretch;
+}
+.insight-card { min-width: 0; box-shadow: none; }
+.insight-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+.insight-number { display: grid; justify-items: end; flex: none; }
+.insight-number strong {
+  font-size: 2rem; line-height: 1; font-weight: 330;
+  letter-spacing: -0.04em; font-variant-numeric: tabular-nums;
+}
+.insight-number span { color: var(--ink-3); font-size: 0.72rem; white-space: nowrap; }
+.insight-takeaway {
+  margin-top: auto; padding-top: 14px; border-top: 1px solid var(--line);
+  color: var(--ink-2); font-size: 0.84rem;
+}
+.insight-takeaway strong { color: var(--ink); }
+.history-card { padding-block: 0; }
+.history-card summary {
+  list-style: none; cursor: pointer; padding-block: 20px;
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+}
+.history-card summary::-webkit-details-marker { display: none; }
+.history-card summary > span:first-child { display: grid; gap: 2px; }
+.history-card summary small { color: var(--ink-2); font-size: 0.8rem; font-weight: 400; }
+.history-card[open] summary { border-bottom: 1px solid var(--line); }
+.history-card .table-scroll { padding-block: 12px 20px; }
+@media (max-width: 1080px) { .insight-grid { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 760px) {
+  .insight-hero { align-items: stretch; flex-direction: column; }
+  .insight-action { align-items: stretch; }
+  .insight-grid { grid-template-columns: 1fr; }
+}
+
 .bars { display: flex; align-items: flex-end; gap: 9px; height: 132px; padding-top: 8px; }
 .bars .col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 7px; height: 100%; justify-content: flex-end; }
 .bars .bar { width: 100%; max-width: 40px; background: var(--accent); border-radius: 6px 6px 3px 3px; min-height: 3px; transition: height 0.4s ease; }

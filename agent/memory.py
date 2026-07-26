@@ -186,7 +186,11 @@ def _row_to_session(row: sqlite3.Row) -> dict[str, Any]:
 
 def summary(user_id: str = "local", days: int = 7) -> dict[str, Any]:
     """Compact history the agent reasons over. Small on purpose — it goes in a prompt."""
-    since = (datetime.now() - timedelta(days=days)).isoformat(timespec="seconds")
+    # Match daily_counts(): "7 days" means today plus the six preceding
+    # calendar days. A rolling 168-hour cutoff made the headline total include
+    # part of an eighth calendar day, so it could disagree with the chart.
+    since_day = date.today() - timedelta(days=days - 1)
+    since = datetime.combine(since_day, datetime.min.time()).isoformat(timespec="seconds")
     with _lock, connect() as conn:
         rows = conn.execute(
             "SELECT * FROM sessions WHERE user_id = ? AND started_at >= ?",

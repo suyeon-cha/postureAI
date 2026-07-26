@@ -18,15 +18,16 @@ current unified application branch.
    visibility/control checks for wrist and screen-rest routines.
 8. The user reports Better, Same, or Worse.
 9. The result is saved locally and changes future recommendations.
-10. The private dashboard updates. Employers see only opted-in aggregates for
-    cohorts of 10 or more.
+10. **My insights** updates with the employee's routine, self-reported outcomes,
+    current focus area, and one recommended next action. Employer aggregates,
+    if enabled, remain in a separate admin-only surface.
 
 ## Implemented
 
 | Capability | Status | Implementation |
 |---|---|---|
 | English onboarding and settings | Working | Goal, common areas, duration, local voice concern; standing is per session, tone/privacy stay in Settings |
-| Simplified desktop information architecture | Working | Three primary destinations: Reset, Progress, Workspace; Settings is secondary |
+| Simplified desktop information architecture | Working | Two employee destinations: Reset and My insights; Settings is secondary |
 | Per-session readiness guidance | Working | Space, camera choice, and comfort checks appear before every guided reset |
 | Plain-language and card check-in | Working | Deterministic parsing plus local agent |
 | Safety escalation | Working | Red-flag gate before routine selection |
@@ -39,8 +40,8 @@ current unified application branch.
 | Wrist/hand video AI | MVP | Local Qwen2.5-VL visibility and controlled-movement check |
 | Screen-rest video AI | MVP | Local Qwen2.5-VL visibility/participation check |
 | Local voice input/output | Working when models installed | faster-whisper + Piper |
-| Personal progress dashboard | Working | Completion, outcomes, patterns, recent sessions |
-| Employer dashboard | Working | Aggregate-only query with 10-person floor |
+| Personal insights dashboard | Working | Non-repetitive routine, outcome, focus-area, next-action, and expandable history views |
+| Employer reporting | Working, admin-only | Aggregate-only query with 10-person floor; not exposed in employee navigation |
 | Shareable preview | Working | `ui/preview.html`, clearly labelled as synthetic |
 | No external AI APIs | Enforced | Local endpoint assertion and verification script |
 

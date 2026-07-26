@@ -404,7 +404,12 @@ export class MockBackend {
   }
 
   _summary() {
-    const week = this.sessions.filter((s) => Date.now() - new Date(s.started_at) < 7 * 864e5);
+    // Use the same seven calendar days shown by dashboard(), so the headline
+    // session count and day bars always reconcile.
+    const since = new Date();
+    since.setHours(0, 0, 0, 0);
+    since.setDate(since.getDate() - 6);
+    const week = this.sessions.filter((s) => new Date(s.started_at) >= since);
     const done = week.filter((s) => s.completed);
     const responses = { better: 0, same: 0, worse: 0 };
     done.forEach((s) => { if (s.response) responses[s.response]++; });

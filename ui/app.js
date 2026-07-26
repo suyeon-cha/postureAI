@@ -49,8 +49,7 @@ const FORCE_PREVIEW =
 
 const NAV = [
   { key: "home", label: "Reset" },
-  { key: "dashboard", label: "Progress" },
-  { key: "workspace", label: "Workspace" },
+  { key: "dashboard", label: "My insights" },
 ];
 
 // ─────────────────────────────── state ───────────────────────────────
@@ -507,57 +506,13 @@ function viewWelcome() {
           <p class="small muted">Choose an area, available time, and seated or standing.</p></div>
         <div class="step"><strong>Guided reset</strong>
           <p class="small muted">Review a safe setup, then follow the timer and one coaching cue.</p></div>
-        <div class="step"><strong>Visible progress</strong>
-          <p class="small muted">Rate the result and track consistency, outcomes, and body-area patterns.</p></div>
+        <div class="step"><strong>Personal insights</strong>
+          <p class="small muted">See your routine, what helps, and the area to focus on next.</p></div>
       </div>
       <div class="welcome-trust">
         <span>✓ All AI runs locally on the GB10</span>
         <span>✓ Camera is optional for every session</span>
         <span>✓ General wellness—not medical care</span>
-      </div>
-    </section>
-
-    <section class="band sunk" style="border-radius:20px" hidden>
-      <div class="section">
-        <div class="dash-grid">
-          <div class="stack">
-            <div class="stack-sm measure">
-              <h2>Why this runs locally</h2>
-              <p class="muted">Not a deployment detail — it's the reason the product is usable at
-                all. A camera-guided wellbeing workflow handles the most personal data there is.</p>
-            </div>
-            <ul class="privacy-list">
-              <li><span class="ico">🖥️</span><div><strong>Everything runs on this machine.</strong>
-                <div class="small muted">Language model, pose model, agent reasoning, memory, and
-                voice all execute on the Dell Pro Max with GB10. No external AI API is called, ever
-                — the code refuses a non-local inference endpoint at startup.</div></div></li>
-              <li><span class="ico">📷</span><div><strong>The camera is off until you turn it on.</strong>
-                <div class="small muted">Guidance is optional and per-session. When it's on, frames
-                are analysed in memory and dropped immediately. Nothing is recorded, queued, or
-                written to disk.</div></div></li>
-              <li><span class="ico">⚡</span><div><strong>Cues arrive while you're moving.</strong>
-                <div class="small muted">No round trip to a datacentre, so feedback lands during
-                the movement instead of after it — and it still works with the network unplugged.</div></div></li>
-              <li><span class="ico">🌿</span><div><strong>This is comfort, not care.</strong>
-                <div class="small muted">FlowReset offers movement breaks and form awareness. It
-                does not diagnose or treat anything. For pain that is severe, persistent, or getting
-                worse, please talk to a healthcare professional.</div></div></li>
-            </ul>
-          </div>
-
-          <div class="card stack">
-            <span class="eyebrow">For workplaces</span>
-            <h3>Wellbeing your team will actually opt into</h3>
-            <p class="small muted">People Ops sees aggregate engagement for people who chose to
-              share it — never an individual, never video, never a symptom. Any cohort under ten
-              people is suppressed in the query itself, not hidden in the interface.</p>
-            <div class="grid cols-2">
-              <div class="stat"><div class="num">10+</div><div class="lbl">minimum reporting cohort</div></div>
-              <div class="stat"><div class="num">0</div><div class="lbl">individual records exposed</div></div>
-            </div>
-            <button class="btn secondary" id="toWorkspace">See the workspace view</button>
-          </div>
-        </div>
       </div>
     </section>
 
@@ -579,11 +534,6 @@ function viewWelcome() {
   $("#start2", wrap).addEventListener("click", () => go("goals"));
   $("#skipOnboard", wrap).addEventListener("click", finishOnboarding);
   $("#skip2", wrap).addEventListener("click", finishOnboarding);
-  $("#toWorkspace", wrap).addEventListener("click", () => {
-    S.onboarded = true;
-    localStorage.setItem("flowreset.onboarded", "1");
-    go("workspace");
-  });
   return wrap;
 }
 
@@ -1226,7 +1176,7 @@ function viewComplete() {
           ${S.insight ? `<div class="why"><strong class="small">One pattern</strong>
             <p class="small" style="color:var(--accent-ink);margin-top:6px">${esc(S.insight)}</p></div>` : ""}
           <div class="row">
-            <button class="btn" id="toDash">See progress</button>
+            <button class="btn" id="toDash">See my insights</button>
             <button class="btn subtle" id="again">Start another reset</button>
           </div>
         </div>`));
@@ -1255,59 +1205,105 @@ function viewDashboard() {
   if (!d) return el(`<div class="notice">Loading your history…</div>`);
   const s = d.summary;
   const labels = d.symptom_labels || {};
+  const topSymptom = s.top_symptom ||
+    Object.entries(s.by_symptom || {}).sort((a, b) => b[1] - a[1])[0]?.[0] ||
+    "neck_shoulders";
+  const topLabel = labels[topSymptom] || topSymptom.replace(/_/g, " ");
+  const totalRated = Object.values(s.responses || {}).reduce((sum, n) => sum + n, 0);
+  const recommendedMinutes = topSymptom === "tired_eyes" ? 1 : 2;
+  const nextSteps = {
+    neck_shoulders: "Try a 2-minute neck and shoulder reset before your longest focus block.",
+    back_hips: "Break up your next long sitting block with a 2-minute back and hip reset.",
+    legs_glutes: "Use a 2-minute standing leg and glute reset after your next long meeting.",
+    wrists_hands: "Try a 2-minute wrist and hand reset before your longest typing block.",
+    tired_eyes: "Take a 1-minute screen-rest reset before your next video meeting.",
+    general: "Schedule a 2-minute reset before your longest focus block.",
+  };
+  const responseTakeaway = !totalRated
+    ? "Rate your next reset to start learning what works for you."
+    : s.better_rate >= 0.7
+      ? "Most rated resets leave you feeling better. Keep the routines that work in rotation."
+      : s.better_rate >= 0.45
+        ? "Your results are mixed. Try the recommended focus for one week, then compare."
+        : "Your recent resets are not helping consistently. Reduce intensity and reconsider the routine.";
+  const habitTakeaway = s.sessions_completed >= 5
+    ? "You have a steady reset routine. Protect the time blocks where you are already consistent."
+    : s.sessions_completed
+      ? "You have started the habit. Add one reset before a predictable daily work block."
+      : "Complete one reset to establish your personal baseline.";
 
   const wrap = el(`<div class="stack">
-    <div class="stack-sm"><h1>Your progress</h1>
-      <p class="muted">Everything here is computed on this machine from your own sessions.</p></div>
+    <div class="stack-sm"><span class="eyebrow">Private to you</span><h1>My insights</h1>
+      <p class="muted">Your session history is analyzed locally on this machine—never compared
+        with coworkers and never shown here as a team score.</p></div>
 
-    <div class="grid stat-row">
-      <div class="card stat"><div class="num">${s.sessions_completed}</div>
-        <div class="lbl">resets completed · 7 days</div></div>
-      <div class="card stat"><div class="num">${Math.round(s.better_rate * 100)}%</div>
-        <div class="lbl">felt better afterwards</div></div>
-      <div class="card stat"><div class="num">${Math.round(s.completion_rate * 100)}%</div>
-        <div class="lbl">of started resets finished</div></div>
-      <div class="card stat"><div class="num">${s.streak_days}</div>
-        <div class="lbl">day streak</div></div>
-    </div>
+    <section class="card insight-hero" aria-labelledby="next-step-title">
+      <div class="stack-sm">
+        <span class="eyebrow">Your next best step</span>
+        <h2 id="next-step-title">${esc(topLabel)} is your current focus</h2>
+        <p class="hero-lede">${esc(nextSteps[topSymptom] || nextSteps.general)}</p>
+      </div>
+      <div class="stack-sm insight-action">
+        <span class="pill info">Based on your last 7 days</span>
+        <button class="btn" id="recommendedReset">Start recommended reset</button>
+      </div>
+    </section>
 
-    <div class="dash-grid">
-      <div class="card stack">
-        <div class="stack-sm"><h2>Am I building the habit?</h2>
-          <p class="small muted">Completed resets per day.</p></div>
+    <div class="insight-grid">
+      <section class="card insight-card stack">
+        <div class="insight-card-head">
+          <div class="stack-sm"><span class="eyebrow">Routine</span>
+            <h2>How often am I resetting?</h2></div>
+          <div class="insight-number"><strong>${s.sessions_completed}</strong>
+            <span>sessions · 7 days</span></div>
+        </div>
         <div id="bars"></div>
-      </div>
+        <p class="insight-takeaway"><strong>${s.streak_days}-day streak.</strong>
+          ${esc(habitTakeaway)}</p>
+      </section>
 
-      <div class="stack">
-        <div class="card stack">
-          <div class="stack-sm"><h2>Is it helping?</h2>
-            <p class="small muted">How you rated each completed reset.</p></div>
-          <div id="split"></div>
-        </div>
-        <div class="card stack">
-          <div class="stack-sm"><h2>Where do I need support?</h2>
-            <p class="small muted">Which areas you reset most often.</p></div>
-          <div id="areas"></div>
-        </div>
-      </div>
+      <section class="card insight-card stack">
+        <div class="stack-sm"><span class="eyebrow">Outcome</span>
+          <h2>How do I feel afterwards?</h2>
+          <p class="small muted">Your answer after each completed reset.</p></div>
+        <div id="split"></div>
+        <p class="insight-takeaway">${esc(responseTakeaway)}</p>
+      </section>
+
+      <section class="card insight-card stack">
+        <div class="stack-sm"><span class="eyebrow">Focus</span>
+          <h2>What still needs attention?</h2>
+          <p class="small muted">Areas you chose most often this week.</p></div>
+        <div id="areas"></div>
+        <p class="insight-takeaway"><strong>${esc(topLabel)}</strong> appears most often.
+          Use the recommendation above as your next experiment.</p>
+      </section>
     </div>
 
-    <div class="card stack">
-      <div class="row"><h2>Recent sessions</h2>
-        <span class="pill" style="margin-left:auto">demo history is labelled</span></div>
+    <details class="card history-card">
+      <summary><span><strong>Recent session history</strong>
+        <small>Review the details behind your insights</small></span>
+        <span class="pill">Last ${Math.min((d.recent || []).length, 5)}</span></summary>
       <div class="table-scroll"><table>
         <thead><tr><th>When</th><th>Area</th><th>Length</th><th>Routine</th><th>Result</th></tr></thead>
         <tbody id="rows"></tbody>
       </table></div>
-    </div>
+    </details>
   </div>`);
 
   $("#bars", wrap).append(charts.dayBars(d.daily));
   $("#split", wrap).append(charts.responseSplit(s.responses));
   $("#areas", wrap).append(charts.areaBars(s.by_symptom, labels));
+  $("#recommendedReset", wrap).addEventListener("click", () => {
+    S.intake.symptom = topSymptom;
+    S.intake.duration_min = recommendedMinutes;
+    S.intake.touched.symptom = true;
+    S.intake.touched.duration = true;
+    go("home");
+  });
 
   const tbody = $("#rows", wrap);
-  (d.recent || []).forEach((r) => {
+  (d.recent || []).slice(0, 5).forEach((r) => {
     const when = new Date(r.started_at);
     const badge = r.response
       ? `<span class="pill ${r.response === "better" ? "good" : r.response === "worse" ? "warn" : ""}">${r.response}</span>`

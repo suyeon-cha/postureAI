@@ -29,17 +29,18 @@ adapt future recommendations.
 This is a general-wellness product, not medical care, physical therapy, or a posture-grading
 surveillance system.
 
-## Product modes, one local agent
+## Employee experience and employer boundary
 
-| Mode | Trigger | Camera | Default |
+| Employee capability | Trigger | Camera | Default |
 |---|---|---|---|
 | **Reset** (the golden path) | You ask for one | Off until you opt in, per session | ✅ on |
+| **My insights** | You review your own routine, outcomes, and current focus | Not used | Private to the employee |
 | **Watch** | Accumulated sitting / neck / crossed-leg time crosses a threshold, then it *offers* | Off unless you enable watch mode | ❌ off |
-| **Workspace** (B2B) | An authorized wellbeing lead opens aggregate reporting | Not available to the employer | Opt-in aggregates only |
 
 Watch mode never starts a session, stops asking when you decline, and clears its accumulator
-when switched off. Reset mode is what the live demo uses. Workspace mode suppresses cohorts
-with fewer than 10 opted-in employees.
+when switched off. Reset and My insights are the two employee destinations used in the live
+demo. Aggregate employer reporting is a separate admin capability, never part of the employee
+navigation, and suppresses cohorts with fewer than 10 opted-in employees.
 
 ## End-to-end employee workflow
 
@@ -158,7 +159,7 @@ approval process, broader-body testing, and confidence-threshold evaluation.
   video, no audio, no scores.
 - Settings has a real export and a real delete.
 
-### Workspace (B2B) mode
+### Employer reporting (separate admin surface)
 
 `memory.workspace_summary()` aggregates in SQL and suppresses any cohort under
 `K_ANONYMITY = 10`. It takes no `user_id` parameter, so there is no per-person query to call.
@@ -166,9 +167,10 @@ Teams below the floor are suppressed entirely rather than rounded. Sharing is op
 and off by default.
 
 The B2B product model is an employer wellness license with employee-controlled participation.
-The workspace dashboard focuses on program adoption, completed resets, common support areas,
-and Better/Same/Worse trends. It is not an employee-performance dashboard and does not expose
-individual posture, attendance, pain, camera, or productivity data.
+The employer report focuses on program adoption and aggregate outcomes. It is intentionally
+absent from the employee application, is not an employee-performance dashboard, and does not
+expose individual posture, attendance, pain, camera, or productivity data. Employees see only
+their own **My insights** view.
 
 ## Hackathon rules and current compliance
 
@@ -305,8 +307,8 @@ one reliable, camera-guided reset, while the interface and approved library show
 4. Use a chair sit-to-stand for the most robust demo, or a split-stance lunge only after
    successful calibration. Intentionally trigger one supported fault and let FlowReset speak
    one approved correction.
-5. Complete the reset, choose Better, and show the personal dashboard update.
-6. Open Workspace to show only k-anonymized aggregate data.
+5. Complete the reset, choose Better, and show **My insights** update with a recommended next step.
+6. Show the privacy setting that makes employer sharing opt-in; do not switch into a team view.
 7. Show the approved runtime trace and repeat the local-first proof with external egress
    blocked.
 

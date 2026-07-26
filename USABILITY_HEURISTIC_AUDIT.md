@@ -16,7 +16,7 @@ each principle satisfied.
 | 5 | Error prevention | Safe defaults, camera off until permission, approved-only exercise composer, deterministic safety gate, confirmation before history deletion, disabled navigation during an active session | High-cost errors are blocked before state changes |
 | 6 | Recognition rather than recall | Visible body-area choices, selected-state checkmark, constraint summary, complete movement list, per-session readiness checklist, contextual Why this?, persistent navigation | Users do not need to remember onboarding selections or instructions |
 | 7 | Flexibility and efficiency | Skip setup, cards or natural language, local voice input, duration and movement options, keyboard shortcut, camera or timer-only modes, saved preferences | Novice and repeat-user paths both reach a reset |
-| 8 | Aesthetic and minimalist design | Three primary destinations—Reset, Progress, Workspace—plus secondary Settings; one primary action per stage; knowledge and help appear only in context | Primary flow avoids separate feature silos and hides governance detail until requested |
+| 8 | Aesthetic and minimalist design | Two employee destinations—Reset and My insights—plus secondary Settings; each insight answers a different question (routine, outcome, or focus); session history is expandable | Employee flow has no team dashboard and avoids repeating the same metric across summary cards and charts |
 | 9 | Recognize, diagnose and recover from errors | Plain-language toast alerts, camera reframing instruction, local-AI timeout recovery, connection-loss notice, retry instructions, timer-only fallback | Errors state what happened and give a concrete next action |
 | 10 | Help and documentation | A short readiness checklist before every session, contextual camera recovery, expandable Why this?, safety boundary, and privacy explanation | Guidance appears at the moment of need without adding a separate primary Help destination |
 
@@ -39,6 +39,9 @@ each principle satisfied.
 9. Complete first-run setup in two short steps, then verify that each generated
    plan repeats the space, camera, and comfort checks before the session starts.
 10. Complete the entire flow with keyboard controls and visible focus.
+11. Open **My insights** and verify the next action, routine, outcome, and focus
+    sections use only the signed-in employee's data and do not show coworker,
+    team, leaderboard, or comparison data.
 
 ## Remaining usability validation
 
