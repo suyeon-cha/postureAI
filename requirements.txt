@@ -1,3 +1,4 @@
+# All local. Nothing here reaches a hosted model API.
 mediapipe
 opencv-python
 fastapi
@@ -7,3 +8,6 @@ numpy
 piper-tts
 requests
 pyyaml
+
+# Voice input (P1). Optional — the UI keeps its text box if this is absent.
+faster-whisper

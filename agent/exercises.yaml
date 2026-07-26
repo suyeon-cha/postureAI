@@ -1,16 +1,408 @@
 # FlowReset exercise library — lane 2 owns this file.
-# Schema: see contracts.md. One example entry below; library is written at the event.
-# Planned: neck_side_stretch, shoulder_rolls, y_raise, seated_twist, chin_tuck,
-#          cat_cow, chest_opener, trap_stretch, hip_flexor_reset, wrist_stretch,
-#          squat, lunge
+# Schema: contracts.md, extended (see "exercises.yaml schema, v1.1").
+#
+# Every routine the agent can propose is composed from these entries and
+# nothing else. select_approved_routine() will not emit a move that is not
+# a key here — that is the safety boundary. The model picks *among* these;
+# it never invents a movement.
+#
+# Fields beyond the v1.0 schema:
+#   seconds           budget the composer spends on this move (both sides)
+#   seated_ok         can be done without standing up
+#   sides             2 when the move mirrors left/right
+#   hold_seconds      target stillness for angle_hold / timer_only
+#   intensity         gentle | moderate  (we never go above moderate)
 
-_example_squat:
+# ─────────────────────────── neck & shoulders ───────────────────────────
+
+neck_side_stretch:
+  name: "Neck side stretch"
+  targets: [neck, shoulders]
+  detection: angle_hold
+  hold_seconds: 20
+  sides: 2
+  seconds: 45
+  seated_ok: true
+  requires_full_body: false
+  intensity: gentle
+  cues:
+    setup: "Sit tall. Let your right ear drift toward your right shoulder."
+    during: "Breathe out and let the shoulder drop away from your ear."
+    fault_shoulder_hiked: "Let that bottom shoulder soften down."
+    fault_rushing: "Stay here — give it a couple more breaths."
+
+chin_tuck:
+  name: "Chin tuck"
+  targets: [neck]
+  detection: vlm_judge
+  target_reps: 6
+  seconds: 40
+  seated_ok: true
+  requires_full_body: false
+  intensity: gentle
+  cues:
+    setup: "Look straight ahead. Draw your chin back like you're making a double chin."
+    during: "Small movement — the back of your neck should feel long."
+    fault_tilting_down: "Keep your eyes level, pull straight back instead of nodding."
+
+shoulder_rolls:
+  name: "Shoulder rolls"
+  targets: [shoulders, neck]
+  detection: reps
+  target_reps: 8
+  seconds: 40
+  seated_ok: true
+  requires_full_body: false
+  intensity: gentle
+  cues:
+    setup: "Arms heavy. Roll your shoulders up, back, and down."
+    during: "Make the circle bigger — all the way back."
+    fault_too_fast: "Slow it down. Four seconds per circle."
+    fault_small_range: "Bigger circle — reach the top of the shrug."
+
+trap_stretch:
+  name: "Upper trap stretch"
+  targets: [neck, shoulders]
+  detection: angle_hold
+  hold_seconds: 20
+  sides: 2
+  seconds: 50
+  seated_ok: true
+  requires_full_body: false
+  intensity: gentle
+  cues:
+    setup: "Reach your right hand under the chair seat. Tilt your head left."
+    during: "Long, slow exhale. No pulling — just weight."
+    fault_shoulder_hiked: "Keep the anchored shoulder low."
+
+chest_opener:
+  name: "Chest opener"
+  targets: [shoulders, back]
+  detection: angle_hold
+  hold_seconds: 25
+  seconds: 35
+  seated_ok: true
+  requires_full_body: false
+  intensity: gentle
+  cues:
+    setup: "Clasp your hands behind your back, or grip the sides of the chair."
+    during: "Lift your chest and widen across the collarbones."
+    fault_arching: "Ribs down — the lift comes from the chest, not the low back."
+
+y_raise:
+  name: "Wall Y-raise"
+  targets: [shoulders, back]
+  detection: reps
+  target_reps: 8
+  seconds: 45
+  seated_ok: true
+  requires_full_body: false
+  intensity: moderate
+  cues:
+    setup: "Arms up in a Y. Thumbs back, elbows soft."
+    during: "Feel your shoulder blades slide down and together."
+    fault_too_fast: "Slower — three seconds up, three down."
+    fault_shrugging: "Keep your shoulders away from your ears."
+
+# ──────────────────────────── back & hips ────────────────────────────
+
+seated_twist:
+  name: "Seated spinal twist"
+  targets: [back, sitting]
+  detection: angle_hold
+  hold_seconds: 20
+  sides: 2
+  seconds: 50
+  seated_ok: true
+  requires_full_body: false
+  intensity: gentle
+  cues:
+    setup: "Feet flat. Turn your chest to the right, hand on the chair back."
+    during: "Grow taller as you exhale, then turn a little further."
+    fault_rushing: "Hold it — let the breath do the work."
+
+cat_cow:
+  name: "Seated cat-cow"
+  targets: [back, sitting]
+  detection: reps
+  target_reps: 8
+  seconds: 50
+  seated_ok: true
+  requires_full_body: false
+  intensity: gentle
+  cues:
+    setup: "Hands on your knees. Arch your back, then round it."
+    during: "Move with your breath — inhale to arch, exhale to round."
+    fault_too_fast: "Half that speed. Let each breath finish."
+    fault_small_range: "Bigger — really round through the upper back."
+
+thoracic_extension:
+  name: "Chair-back extension"
+  targets: [back, shoulders]
+  detection: angle_hold
+  hold_seconds: 20
+  seconds: 35
+  seated_ok: true
+  requires_full_body: false
+  intensity: gentle
+  cues:
+    setup: "Sit back so the chair edge meets your mid-back. Hands behind your head."
+    during: "Open across the chest and breathe into the stretch."
+    fault_arching: "Keep it in the upper back — don't dump into the low back."
+
+hip_flexor_reset:
+  name: "Standing hip flexor reset"
+  targets: [hips, sitting]
+  detection: angle_hold
+  hold_seconds: 25
+  sides: 2
+  seconds: 60
+  seated_ok: false
+  requires_full_body: true
+  intensity: moderate
+  cues:
+    setup: "Step your right foot back into a short lunge. Stand tall."
+    during: "Tuck your tailbone under — you'll feel the front of the back hip."
+    fault_arching: "Tuck the tailbone; that's where the stretch comes from."
+    fault_framing: "Step back so I can see your feet."
+
+standing_forward_fold:
+  name: "Standing forward fold"
+  targets: [back, hips]
+  detection: angle_hold
+  hold_seconds: 25
+  seconds: 35
+  seated_ok: false
+  requires_full_body: true
+  intensity: gentle
+  cues:
+    setup: "Feet hip width. Soft knees. Hinge and let your head hang."
+    during: "Let your neck go completely. Sway a little if it feels good."
+    fault_locked_knees: "Bend your knees more — this isn't a hamstring test."
+
+hip_circles:
+  name: "Standing hip circles"
+  targets: [hips, sitting]
+  detection: reps
+  target_reps: 10
+  seconds: 40
+  seated_ok: false
+  requires_full_body: true
+  intensity: gentle
+  cues:
+    setup: "Hands on your hips. Draw slow circles with your pelvis."
+    during: "Widen the circle. Five each direction."
+    fault_too_fast: "Slower and wider."
+
+squat:
   name: "Bodyweight squat"
   targets: [sitting, hips]
   detection: reps
   target_reps: 8
+  seconds: 55
+  seated_ok: false
   requires_full_body: true
+  intensity: moderate
   cues:
     setup: "Step back until I can see your ankles."
     during: "Slow on the way down — four seconds."
     fault_knee_valgus: "Knees are caving — push them out."
+    fault_too_shallow: "A little deeper if that feels okay."
+    fault_framing: "Step back — I need to see your feet."
+
+calf_raise:
+  name: "Calf raise"
+  targets: [sitting, hips, legs]
+  detection: reps
+  target_reps: 12
+  seconds: 40
+  seated_ok: false
+  requires_full_body: true
+  intensity: gentle
+  cues:
+    setup: "Stand tall, hand on the desk for balance."
+    during: "All the way up, slow all the way down."
+    fault_too_fast: "Pause at the top."
+
+# ──────────────────────── legs & glutes ────────────────────────
+# Long sitting leaves glutes under-used and hip flexors short. These are the
+# only moves in the library that load a muscle rather than stretch one, so
+# their form rules are the strictest — see detectors.MoveTracker._check_faults.
+
+glute_squeeze:
+  name: "Seated glute squeeze"
+  targets: [glutes, sitting]
+  detection: reps
+  target_reps: 10
+  seconds: 35
+  seated_ok: true
+  requires_full_body: false
+  intensity: gentle
+  cues:
+    setup: "Sit tall, feet flat and uncrossed. Squeeze both glutes and hold for three."
+    during: "Squeeze, hold three, release. Keep breathing."
+    fault_rushing: "Hold each squeeze for a full three seconds."
+
+figure_four:
+  name: "Seated figure-four"
+  targets: [glutes, hips, pelvis]
+  detection: angle_hold
+  hold_seconds: 25
+  sides: 2
+  seconds: 60
+  seated_ok: true
+  requires_full_body: false
+  intensity: gentle
+  cues:
+    setup: "Cross your right ankle over your left knee, letting the right knee open outward."
+    during: "Sit tall and hinge forward slightly from the hips. Stop where you feel it."
+    fault_rounding: "Lead with your chest, not your head — keep the back long."
+    fault_shoulder_hiked: "Let your shoulders settle."
+
+chair_squat:
+  name: "Sit-to-stand"
+  targets: [glutes, legs, sitting]
+  detection: reps
+  target_reps: 8
+  seconds: 50
+  seated_ok: false
+  requires_full_body: true
+  intensity: moderate
+  cues:
+    setup: "Feet hip width in front of your chair. Stand up without using your hands."
+    during: "Push the floor away through your heels. Sit back down slowly."
+    fault_knee_valgus: "Knees are caving — track them over your middle toes."
+    fault_too_fast: "Slower on the way down — three seconds to the seat."
+    fault_framing: "Step back so I can see your knees and feet."
+
+hip_hinge:
+  name: "Standing hip hinge"
+  targets: [glutes, hips, back]
+  detection: reps
+  target_reps: 8
+  seconds: 45
+  seated_ok: false
+  requires_full_body: true
+  intensity: moderate
+  cues:
+    setup: "Feet hip width, soft knees, hands on your hip creases."
+    during: "Push your hips back, chest stays long. Squeeze your glutes to stand."
+    fault_rounding: "Keep your back long — the movement is hips back, not spine bending."
+    fault_locked_knees: "Let the knees stay soft."
+    fault_framing: "Step back so I can see your hips and knees."
+
+lunge:
+  name: "Split-stance lunge"
+  targets: [glutes, legs, hips]
+  detection: reps
+  target_reps: 6
+  sides: 2
+  seconds: 70
+  seated_ok: false
+  requires_full_body: true
+  intensity: moderate
+  cues:
+    setup: "Step your right foot back about a stride. Feet hip width, both toes pointing forward."
+    during: "Drop straight down — front shin stays vertical, torso stays tall."
+    fault_knee_past_toes: "Shift your weight back — your front knee is drifting past your toes."
+    fault_knee_valgus: "Track that front knee over your middle toes, not inward."
+    fault_torso_pitched: "Stand taller — you're leaning over the front leg."
+    fault_too_shallow: "A little deeper if that feels okay — back knee toward the floor."
+    fault_too_fast: "Slower. Three seconds down, three up."
+    fault_framing: "Step back so I can see both feet and knees."
+
+# ─────────────────────────── wrists & hands ───────────────────────────
+
+wrist_stretch:
+  name: "Wrist extensor stretch"
+  targets: [wrists]
+  detection: timer_only
+  hold_seconds: 20
+  sides: 2
+  seconds: 45
+  seated_ok: true
+  requires_full_body: false
+  intensity: gentle
+  cues:
+    setup: "Arm straight out, palm down. Gently draw the fingers back toward you."
+    during: "Ease off if it's sharp — this should be a stretch, not a pinch."
+
+wrist_prayer:
+  name: "Prayer stretch"
+  targets: [wrists]
+  detection: timer_only
+  hold_seconds: 20
+  seconds: 30
+  seated_ok: true
+  requires_full_body: false
+  intensity: gentle
+  cues:
+    setup: "Palms together at your chest. Lower your hands, keep the palms touching."
+    during: "Stop where you feel it. Breathe."
+
+finger_fan:
+  name: "Finger fan and fist"
+  targets: [wrists]
+  detection: timer_only
+  hold_seconds: 20
+  seconds: 25
+  seated_ok: true
+  requires_full_body: false
+  intensity: gentle
+  cues:
+    setup: "Spread your fingers wide, then make a loose fist. Repeat slowly."
+    during: "Keep the fist loose — no gripping."
+
+# ──────────────────────────── eyes & reset ────────────────────────────
+
+eye_horizon:
+  name: "Distance gaze"
+  targets: [eyes]
+  detection: timer_only
+  hold_seconds: 20
+  seconds: 25
+  seated_ok: true
+  requires_full_body: false
+  intensity: gentle
+  cues:
+    setup: "Look at something at least twenty feet away — out a window if you can."
+    during: "Let your eyes relax onto it. Blink normally."
+
+eye_palming:
+  name: "Palming"
+  targets: [eyes]
+  detection: timer_only
+  hold_seconds: 25
+  seconds: 30
+  seated_ok: true
+  requires_full_body: false
+  intensity: gentle
+  cues:
+    setup: "Rub your palms warm, then cup them over your closed eyes."
+    during: "No pressure on the eyeballs. Just darkness and warmth."
+
+eye_figure_eight:
+  name: "Slow figure eight"
+  targets: [eyes]
+  detection: timer_only
+  hold_seconds: 20
+  seconds: 25
+  seated_ok: true
+  requires_full_body: false
+  intensity: gentle
+  cues:
+    setup: "Trace a slow, wide figure eight with your eyes. Head still."
+    during: "Slower. Reach the edges of your vision."
+
+box_breath:
+  name: "Box breathing"
+  targets: [eyes, neck, sitting]
+  detection: timer_only
+  hold_seconds: 30
+  seconds: 35
+  seated_ok: true
+  requires_full_body: false
+  intensity: gentle
+  cues:
+    setup: "In for four, hold four, out for four, hold four."
+    during: "Let the exhale be the longest part."

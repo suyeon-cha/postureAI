@@ -1,10 +1,79 @@
 <!doctype html>
 <!-- FlowReset UI — lane 3.
      Pure renderer of `state` + `coach` messages from ws://<box>:8000/ws.
-     Screens: onboarding (duration picker, camera/framing check),
-     live session (skeleton overlay, debt meter, rep counter, model sidebar),
-     EHS dashboard (end-of-day report). Built at the event. -->
-<html>
-  <head><meta charset="utf-8"><title>FlowReset</title></head>
-  <body>FlowReset — built at the event.</body>
+     No build step on purpose: the box shouldn't need node to serve this. -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>FlowReset</title>
+    <link rel="stylesheet" href="/ui/styles.css" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🌿</text></svg>"
+    />
+  </head>
+  <body>
+    <div class="shell">
+      <header class="topbar">
+        <div class="topbar-inner">
+          <a class="brand" href="#" id="brandHome">
+            <span class="mark" aria-hidden="true"></span>
+            <span class="wordmark">FlowReset</span>
+          </a>
+
+          <nav class="nav" id="nav" aria-label="Main"></nav>
+
+          <div class="status" id="localBadge" title="Where inference runs">
+            <span class="dot" data-state="pending"></span>
+            <span class="status-text">Checking local AI…</span>
+          </div>
+        </div>
+      </header>
+
+      <main id="app" class="app" tabindex="-1"></main>
+
+      <footer class="site-footer">
+        <div class="inner">
+          <div>
+            <strong>FlowReset</strong>
+            A private wellbeing agent for desk workers. Runs entirely on the
+            Dell Pro Max with GB10 — no external AI API, no video leaving the machine.
+          </div>
+          <div>
+            <strong>Where the AI runs</strong>
+            Language and vision models, agent reasoning, memory, and voice all
+            execute locally. The browser captures and displays only.
+          </div>
+          <div>
+            <strong>Not medical care</strong>
+            FlowReset offers movement breaks and form awareness. It does not
+            diagnose or treat anything.
+          </div>
+          <p class="legal">
+            For pain that is severe, persistent, or worsening — or numbness, weakness,
+            or changes in vision — please talk to a qualified healthcare professional.
+            Built for the Dell × NVIDIA Local AI Hackathon.
+          </p>
+        </div>
+      </footer>
+
+      <aside class="trace" id="trace" hidden aria-label="Local agent trace">
+        <div class="trace-head">
+          <strong>Local agent trace</strong>
+          <button class="ghost" id="traceClose" aria-label="Hide trace">✕</button>
+        </div>
+        <p class="trace-sub">
+          Every step below ran on this machine. Tool calls are real, not replayed.
+        </p>
+        <ol class="trace-list" id="traceList"></ol>
+      </aside>
+    </div>
+
+    <button class="trace-toggle" id="traceToggle" aria-expanded="false">
+      Agent trace
+    </button>
+
+    <script type="module" src="/ui/app.js"></script>
+  </body>
 </html>

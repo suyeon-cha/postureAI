@@ -1,0 +1,1361 @@
+/* FlowReset UI.
+ *
+ * Renders `state` + `coach` messages from ws://<box>:8000/ws. Holds no product
+ * logic of its own: which moves exist, which routine fits, and what to say all
+ * come from the agent on the box. The browser captures, displays, and counts
+ * down — it runs no inference.
+ */
+
+import { MockBackend } from "./mock.js";
+import { SKELETON_EDGES, drawSkeleton } from "./overlay.js";
+import * as charts from "./charts.js";
+
+const $ = (sel, root = document) => root.querySelector(sel);
+const el = (html) => {
+  const t = document.createElement("template");
+  t.innerHTML = html.trim();
+  return t.content.firstElementChild;
+};
+const esc = (s) =>
+  String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+const SYMPTOM_CARDS = [
+  { key: "neck_shoulders", glyph: "🫱", label: "Neck & shoulders", hint: "Tight traps, stiff neck" },
+  { key: "back_hips", glyph: "🪑", label: "Back & hips", hint: "Been sitting too long" },
+  { key: "legs_glutes", glyph: "🦵", label: "Legs & glutes", hint: "Sleepy from sitting, crossed legs" },
+  { key: "wrists_hands", glyph: "⌨️", label: "Wrists & hands", hint: "Typing fatigue" },
+  { key: "tired_eyes", glyph: "👁️", label: "Tired eyes", hint: "Screen strain, headache" },
+];
+
+const GOALS = [
+  { key: "reduce_stiffness", label: "Reduce desk stiffness", hint: "Loosen up through the day" },
+  { key: "break_consistency", label: "Build break consistency", hint: "Actually take the breaks" },
+  { key: "screen_fatigue", label: "Reduce screen fatigue", hint: "Eyes and headaches" },
+  { key: "daily_movement", label: "Move more each day", hint: "More total movement" },
+];
+
+const STYLES = [
+  { key: "supportive", label: "Supportive", hint: "Warm, unhurried" },
+  { key: "concise", label: "Concise", hint: "Just the plan" },
+  { key: "energetic", label: "Energetic", hint: "Brisk and upbeat" },
+];
+
+const NAV = [
+  { key: "welcome", label: "Overview" },
+  { key: "home", label: "Take a reset" },
+  { key: "dashboard", label: "Progress" },
+  { key: "workspace", label: "Workspace" },
+  { key: "settings", label: "Settings" },
+];
+
+// ─────────────────────────────── state ───────────────────────────────
+
+const S = {
+  screen: "welcome",
+  connected: false,
+  preview: false,
+  health: null,
+  prefs: {
+    goal: "reduce_stiffness",
+    common_areas: ["neck_shoulders"],
+    can_stand: true,
+    preferred_duration_min: 3,
+    coach_style: "supportive",
+    voice: true,
+    watch_mode: false,
+    workspace_opt_in: true,
+    team: "Engineering",
+  },
+  // `touched` records which constraints the user actually set. Untouched chips
+  // are defaults, not instructions, so they must not override what the user
+  // typed — "I need to stay seated" has to beat a stale "Yes" on the chip.
+  intake: { symptom: null, duration_min: 3, can_stand: true, intensity: "moderate", touched: {} },
+  plan: null,
+  why: [],
+  coachText: "",
+  cue: "",
+  live: null, // latest `state.session`
+  keypoints: [],
+  framing: "no_person",
+  cameraOn: false,
+  planning: false,
+  dashboard: null,
+  workspace: null,
+  trace: [],
+  completed: false,
+  response: null,
+  insight: null,
+  onboarded: localStorage.getItem("flowreset.onboarded") === "1",
+};
+
+let socket = null;
+let mock = null;
+let videoStream = null;
+let frameTimer = null;
+
+// ─────────────────────────── transport ───────────────────────────
+
+function send(msg) {
+  if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(msg));
+  else if (mock) mock.send(msg);
+}
+
+async function boot() {
+  renderNav();
+  bindTrace();
+
+  const wsUrl = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`;
+  let opened = false;
+
+  try {
+    socket = new WebSocket(wsUrl);
+    await new Promise((resolve) => {
+      const done = () => resolve();
+      socket.addEventListener("open", () => { opened = true; done(); }, { once: true });
+      socket.addEventListener("error", done, { once: true });
+      socket.addEventListener("close", done, { once: true });
+      setTimeout(done, 1200);
+    });
+  } catch {
+    opened = false;
+  }
+
+  if (opened) {
+    S.connected = true;
+    socket.addEventListener("message", (e) => handle(JSON.parse(e.data)));
+    socket.addEventListener("close", () => { S.connected = false; renderBadge(); });
+    const [health, prefs, dash] = await Promise.all([
+      fetch("/api/health").then((r) => r.json()).catch(() => null),
+      fetch("/api/prefs").then((r) => r.json()).catch(() => null),
+      fetch("/api/dashboard").then((r) => r.json()).catch(() => null),
+    ]);
+    if (health) S.health = health;
+    if (prefs) S.prefs = { ...S.prefs, ...prefs };
+    if (dash) S.dashboard = dash;
+  } else {
+    socket = null;
+    S.preview = true;
+    mock = new MockBackend(handle);
+    S.health = mock.health();
+    S.dashboard = mock.dashboard();
+    S.workspace = mock.workspace();
+  }
+
+  S.intake.duration_min = S.prefs.preferred_duration_min;
+  S.intake.can_stand = S.prefs.can_stand;
+  S.screen = S.onboarded ? "home" : "welcome";
+  renderBadge();
+  render();
+}
+
+function handle(msg) {
+  switch (msg.type) {
+    case "hello":
+      S.health = msg.health;
+      renderBadge();
+      break;
+
+    case "state":
+      S.live = msg.session;
+      S.keypoints = msg.keypoints || [];
+      S.framing = msg.framing;
+      if (S.screen === "session") paintSession();
+      break;
+
+    case "coach":
+      if (msg.plan) {
+        S.plan = msg.plan;
+        S.why = msg.why || [];
+        S.coachText = msg.text;
+        S.planning = false;
+        S.screen = "plan";
+        render();
+      } else if (msg.insight !== undefined || msg.summary) {
+        S.insight = msg.insight;
+        S.coachText = msg.text;
+        if (S.screen === "complete") render();
+      } else if (msg.escalate) {
+        S.planning = false;
+        S.coachText = msg.text;
+        S.screen = "escalate";
+        render();
+      } else {
+        S.cue = msg.text;
+        if (S.screen === "session") paintCue();
+      }
+      break;
+
+    case "session_started":
+      S.plan = msg.plan;
+      S.cameraOn = msg.camera_on;
+      S.screen = "session";
+      render();
+      break;
+
+    case "routine_complete":
+      finishSession(true);
+      break;
+
+    case "dashboard":
+      S.dashboard = msg.data;
+      break;
+
+    case "camera":
+      S.cameraOn = msg.on;
+      break;
+
+    case "trace":
+      S.trace.push(msg.entry);
+      appendTrace(msg.entry);
+      break;
+
+    case "audio":
+      if (S.prefs.voice) new Audio(`data:audio/wav;base64,${msg.wav_b64}`).play().catch(() => {});
+      break;
+  }
+}
+
+// ─────────────────────────── chrome ───────────────────────────
+
+function renderNav() {
+  const nav = $("#nav");
+  nav.innerHTML = "";
+  NAV.forEach((item) => {
+    const b = el(`<button type="button">${item.label}</button>`);
+    b.addEventListener("click", () => go(item.key));
+    nav.append(b);
+  });
+  $("#brandHome").addEventListener("click", (e) => {
+    e.preventDefault();
+    go(S.onboarded ? "home" : "welcome");
+  });
+  markNav();
+}
+
+function markNav() {
+  // The site nav is always available — it's a website, not a wizard. Before
+  // onboarding, only the pages that make sense without preferences show.
+  const open = S.onboarded ? NAV.map((n) => n.key) : ["welcome", "workspace"];
+  [...$("#nav").children].forEach((b, i) => {
+    const key = NAV[i].key;
+    b.hidden = !open.includes(key);
+    if (key === S.screen) b.setAttribute("aria-current", "page");
+    else b.removeAttribute("aria-current");
+  });
+}
+
+function renderBadge() {
+  const badge = $("#localBadge");
+  const dot = $(".dot", badge);
+  const text = $(".status-text", badge);
+  const h = S.health;
+
+  if (S.preview) {
+    dot.dataset.state = "warn";
+    text.textContent = "Preview — no box attached";
+    badge.title =
+      "The UI is running against a local stand-in so screens can be built and reviewed " +
+      "without the GB10. No inference is happening. This mode is not part of the judging path.";
+    return;
+  }
+  const llmOk = h?.llm?.reachable;
+  const poseOk = h?.pose?.available;
+  dot.dataset.state = llmOk && poseOk ? "ok" : llmOk || poseOk ? "warn" : "bad";
+  text.textContent = llmOk && poseOk ? "All AI local on GB10 · No external AI API" : "Local AI partially up";
+  badge.title = [
+    `Language: ${h?.llm?.reason_model} @ ${h?.llm?.endpoint} — ${llmOk ? "up" : "down"}`,
+    `Vision: ${h?.pose?.model} — ${poseOk ? "up" : h?.pose?.error || "down"}`,
+    `Runtime: ${h?.runtime?.runtime}`,
+    `Frames stored: ${h?.pose?.frames_stored ?? 0}`,
+  ].join("\n");
+}
+
+function bindTrace() {
+  const panel = $("#trace");
+  const toggle = $("#traceToggle");
+  const set = (open) => {
+    panel.hidden = !open;
+    toggle.setAttribute("aria-expanded", String(open));
+  };
+  toggle.addEventListener("click", () => set(panel.hidden));
+  $("#traceClose").addEventListener("click", () => set(false));
+}
+
+function appendTrace(entry) {
+  const list = $("#traceList");
+  const kind = entry.kind || "model";
+  let body = "";
+  if (kind === "tool") {
+    body = `<code>${esc(entry.name)}(${esc(JSON.stringify(entry.arguments || {}).slice(1, -1))})</code>
+            <code class="muted">→ ${esc(JSON.stringify(entry.result || {}).slice(0, 160))}</code>`;
+  } else if (kind === "model") {
+    const calls = (entry.tool_calls || []).filter(Boolean);
+    body = `<code>${calls.length ? `wants: ${esc(calls.join(", "))}` : esc((entry.content || "").slice(0, 180))}</code>
+            ${entry.latency_ms ? `<code class="muted">${entry.latency_ms}ms · ${esc(entry.model || "")}</code>` : ""}`;
+  } else if (kind === "intake") {
+    body = `<code>${esc(JSON.stringify(entry.parsed))}</code>`;
+  } else {
+    body = `<code>${esc(JSON.stringify(entry).slice(0, 200))}</code>`;
+  }
+  const item = el(`<li class="trace-item" data-kind="${esc(kind)}">
+      <div class="hd"><span class="kind">${esc(kind)}</span><span class="ts">${esc(entry.at || "")}</span></div>
+      <div class="stack-sm">${body}</div>
+    </li>`);
+  list.append(item);
+  list.scrollTop = list.scrollHeight;
+}
+
+function go(screen) {
+  if (screen === "workspace" && !S.workspace) loadWorkspace();
+  if (screen === "dashboard" && !S.dashboard) loadDashboard();
+  S.screen = screen;
+  render();
+}
+
+async function loadDashboard() {
+  if (mock) { S.dashboard = mock.dashboard(); return; }
+  S.dashboard = await fetch("/api/dashboard").then((r) => r.json()).catch(() => null);
+}
+
+async function loadWorkspace() {
+  if (mock) { S.workspace = mock.workspace(); render(); return; }
+  S.workspace = await fetch("/api/workspace").then((r) => r.json()).catch(() => null);
+  render();
+}
+
+// ─────────────────────────── screens ───────────────────────────
+
+function render() {
+  const app = $("#app");
+  app.innerHTML = "";
+  // The landing page manages its own vertical rhythm with full-bleed bands.
+  app.classList.toggle("bleed", S.screen === "welcome");
+  markNav();
+  const view = {
+    welcome: viewWelcome,
+    goals: viewGoals,
+    prefs: viewPrefs,
+    home: viewHome,
+    plan: viewPlan,
+    session: viewSession,
+    complete: viewComplete,
+    escalate: viewEscalate,
+    dashboard: viewDashboard,
+    workspace: viewWorkspace,
+    settings: viewSettings,
+  }[S.screen];
+  app.append(view());
+  if (S.screen === "session") { paintSession(); paintCue(); }
+  window.scrollTo({ top: 0, behavior: "instant" });
+  app.focus({ preventScroll: true });
+}
+
+/* The landing page. A website home, not an app splash: hero, what it is,
+   how it works, the privacy argument, then a call to action. */
+function viewWelcome() {
+  const wrap = el(`<div>
+    <section class="hero">
+      <div class="stack">
+        <span class="eyebrow">Private wellbeing agent · runs on your machine</span>
+        <h1>Your next productive break is 75&nbsp;seconds away.</h1>
+        <p class="lede">Tell FlowReset what feels uncomfortable, how long you have, and whether
+          you can stand. It picks the smallest reset that fits, guides you through it with the
+          camera if you want, and remembers what actually helped.</p>
+        <div class="row">
+          <button class="btn" id="start">Set up FlowReset</button>
+          <button class="btn secondary" id="skipOnboard">Skip to a reset</button>
+        </div>
+        <p class="tiny muted">No account. No cloud. Camera off by default.</p>
+      </div>
+
+      <div class="hero-art" aria-hidden="true">
+        <div class="mock">
+          <div class="mock-row"><span class="tag">Agent plan</span></div>
+          <div class="mock-row">
+            <span class="mock-ring"><i>0:45</i></span>
+            <div class="stack-sm" style="flex:1">
+              <div class="skel w70"></div><div class="skel w45"></div>
+            </div>
+          </div>
+          <div class="skel w88"></div>
+          <div class="skel w70"></div>
+          <div class="mock-row"><span class="pill good">tempo: good</span>
+            <span class="pill">reps: 4/8</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="band sunk" style="border-radius:20px">
+      <div class="section stack">
+        <div class="stack-sm measure">
+          <h2>The problem isn't awareness.</h2>
+          <p class="muted">You already know you should take breaks. What you don't know, in the
+            moment, is what the smallest useful thing to do is — and whether you're doing it right.</p>
+        </div>
+        <div class="grid cols-3">
+          <div class="feature"><span class="ic">⏰</span><strong>Break timers don't know anything</strong>
+            <p class="small muted">They fire on a schedule and get dismissed. They can't tell the
+              difference between tight shoulders and tired eyes.</p></div>
+          <div class="feature"><span class="ic">📺</span><strong>Stretch libraries need effort</strong>
+            <p class="small muted">Twenty minutes of video for a ninety-second problem, and you
+              still have to pick the right one yourself.</p></div>
+          <div class="feature"><span class="ic">👁️</span><strong>Posture cameras feel like surveillance</strong>
+            <p class="small muted">Continuous monitoring and a posture grade is exactly what makes
+              people close the app. FlowReset is user-triggered.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section stack">
+      <div class="stack-sm measure">
+        <h2>How it works</h2>
+        <p class="muted">Four steps, under two minutes, entirely on this machine.</p>
+      </div>
+      <div class="grid cols-4 steps-flow">
+        <div class="step"><strong>You say what hurts</strong>
+          <p class="small muted">In your own words, or one tap on a body area. Add how long you
+            have and whether standing is an option.</p></div>
+        <div class="step"><strong>The agent reasons</strong>
+          <p class="small muted">It reads your preferences and private history, then composes a
+            routine from an approved library — it can't invent an exercise.</p></div>
+        <div class="step"><strong>It guides the movement</strong>
+          <p class="small muted">Countdown, one instruction at a time, and — only if you turn the
+            camera on — rep counting and a single form cue.</p></div>
+        <div class="step"><strong>You say if it helped</strong>
+          <p class="small muted">Better, same, or worse. That one tap is what makes tomorrow's
+            recommendation better than today's.</p></div>
+      </div>
+    </section>
+
+    <section class="band sunk" style="border-radius:20px">
+      <div class="section">
+        <div class="dash-grid">
+          <div class="stack">
+            <div class="stack-sm measure">
+              <h2>Why this runs locally</h2>
+              <p class="muted">Not a deployment detail — it's the reason the product is usable at
+                all. A camera-guided wellbeing workflow handles the most personal data there is.</p>
+            </div>
+            <ul class="privacy-list">
+              <li><span class="ico">🖥️</span><div><strong>Everything runs on this machine.</strong>
+                <div class="small muted">Language model, pose model, agent reasoning, memory, and
+                voice all execute on the Dell Pro Max with GB10. No external AI API is called, ever
+                — the code refuses a non-local inference endpoint at startup.</div></div></li>
+              <li><span class="ico">📷</span><div><strong>The camera is off until you turn it on.</strong>
+                <div class="small muted">Guidance is optional and per-session. When it's on, frames
+                are analysed in memory and dropped immediately. Nothing is recorded, queued, or
+                written to disk.</div></div></li>
+              <li><span class="ico">⚡</span><div><strong>Cues arrive while you're moving.</strong>
+                <div class="small muted">No round trip to a datacentre, so feedback lands during
+                the movement instead of after it — and it still works with the network unplugged.</div></div></li>
+              <li><span class="ico">🌿</span><div><strong>This is comfort, not care.</strong>
+                <div class="small muted">FlowReset offers movement breaks and form awareness. It
+                does not diagnose or treat anything. For pain that is severe, persistent, or getting
+                worse, please talk to a healthcare professional.</div></div></li>
+            </ul>
+          </div>
+
+          <div class="card stack">
+            <span class="eyebrow">For workplaces</span>
+            <h3>Wellbeing your team will actually opt into</h3>
+            <p class="small muted">People Ops sees aggregate engagement for people who chose to
+              share it — never an individual, never video, never a symptom. Any cohort under five
+              people is suppressed in the query itself, not hidden in the interface.</p>
+            <div class="grid cols-2">
+              <div class="stat"><div class="num">5+</div><div class="lbl">k-anonymity floor</div></div>
+              <div class="stat"><div class="num">0</div><div class="lbl">individual records exposed</div></div>
+            </div>
+            <button class="btn secondary" id="toWorkspace">See the workspace view</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="card cta-band">
+        <div class="stack-sm">
+          <h2>Ready when you are.</h2>
+          <p class="muted">Takes about thirty seconds to set up.</p>
+        </div>
+        <div class="row">
+          <button class="btn" id="start2">Set up FlowReset</button>
+          <button class="btn subtle" id="skip2">Skip to a reset</button>
+        </div>
+      </div>
+    </section>
+  </div>`);
+
+  $("#start", wrap).addEventListener("click", () => go("goals"));
+  $("#start2", wrap).addEventListener("click", () => go("goals"));
+  $("#skipOnboard", wrap).addEventListener("click", finishOnboarding);
+  $("#skip2", wrap).addEventListener("click", finishOnboarding);
+  $("#toWorkspace", wrap).addEventListener("click", () => {
+    S.onboarded = true;
+    localStorage.setItem("flowreset.onboarded", "1");
+    go("workspace");
+  });
+  return wrap;
+}
+
+function viewGoals() {
+  const wrap = el(`<div class="stack">
+    <div class="stack-sm"><span class="eyebrow">Step 1 of 2</span>
+      <h1>What would you like out of this?</h1>
+      <p class="muted">This shapes what FlowReset offers first. You can change it later.</p></div>
+    <div class="grid option-grid" id="goals"></div>
+    <div class="row"><button class="btn" id="next">Continue</button></div>
+  </div>`);
+  GOALS.forEach((g) => {
+    const b = el(`<button class="option" type="button" aria-pressed="${S.prefs.goal === g.key}">
+      <strong>${esc(g.label)}</strong><span class="small muted">${esc(g.hint)}</span></button>`);
+    b.addEventListener("click", () => {
+      S.prefs.goal = g.key;
+      [...$("#goals", wrap).children].forEach((c) => c.setAttribute("aria-pressed", "false"));
+      b.setAttribute("aria-pressed", "true");
+    });
+    $("#goals", wrap).append(b);
+  });
+  $("#next", wrap).addEventListener("click", () => go("prefs"));
+  return wrap;
+}
+
+function viewPrefs() {
+  const wrap = el(`<div class="stack">
+    <div class="stack-sm"><span class="eyebrow">Step 2 of 2</span>
+      <h1>A few preferences</h1>
+      <p class="muted">All of this stays on this machine.</p></div>
+
+    <div class="card stack">
+      <div class="stack-sm"><h3>Where do you usually feel it?</h3>
+        <div class="row" id="areas"></div></div>
+      <div class="stack-sm"><h3>Can you usually stand up?</h3>
+        <div class="row" id="stand"></div></div>
+      <div class="stack-sm"><h3>Preferred session length</h3>
+        <div class="row" id="dur"></div>
+        <p class="tiny muted">One minute between meetings, ten at the end of the day —
+          the agent scales the routine to whatever you pick.</p></div>
+      <div class="stack-sm"><h3>Coach style</h3>
+        <div class="grid option-grid" id="style"></div></div>
+
+      <div class="stack-sm">
+        <h3>Anything else you'd like FlowReset to know?</h3>
+        <p class="small muted">Old injuries, a knee that doesn't like lunges, what your day
+          usually looks like. Optional — and it stays on this machine.</p>
+        <textarea id="concerns" rows="3" placeholder="I sit cross-legged most of the day and my glutes feel dead by 3pm. Left knee is a bit cranky."></textarea>
+        <div class="row">
+          <button class="btn secondary" id="mic" type="button" aria-pressed="false">🎤 Speak instead</button>
+          <span class="small muted" id="micStatus"></span>
+        </div>
+      </div>
+    </div>
+    <div class="row"><button class="btn" id="done">Start using FlowReset</button></div>
+  </div>`);
+
+  SYMPTOM_CARDS.forEach((s) => {
+    const on = S.prefs.common_areas.includes(s.key);
+    const b = el(`<button class="chip" type="button" aria-pressed="${on}">${esc(s.label)}</button>`);
+    b.addEventListener("click", () => {
+      const i = S.prefs.common_areas.indexOf(s.key);
+      if (i >= 0) S.prefs.common_areas.splice(i, 1);
+      else S.prefs.common_areas.push(s.key);
+      b.setAttribute("aria-pressed", String(S.prefs.common_areas.includes(s.key)));
+    });
+    $("#areas", wrap).append(b);
+  });
+
+  [["Yes", true], ["I'm usually seated", false]].forEach(([label, val]) => {
+    const b = el(`<button class="chip" type="button" aria-pressed="${S.prefs.can_stand === val}">${label}</button>`);
+    b.addEventListener("click", () => {
+      S.prefs.can_stand = val;
+      [...$("#stand", wrap).children].forEach((c) => c.setAttribute("aria-pressed", "false"));
+      b.setAttribute("aria-pressed", "true");
+    });
+    $("#stand", wrap).append(b);
+  });
+
+  [1, 2, 3, 5, 10].forEach((m) => {
+    const b = el(`<button class="chip" type="button" aria-pressed="${S.prefs.preferred_duration_min === m}">${m} min</button>`);
+    b.addEventListener("click", () => {
+      S.prefs.preferred_duration_min = m;
+      [...$("#dur", wrap).children].forEach((c) => c.setAttribute("aria-pressed", "false"));
+      b.setAttribute("aria-pressed", "true");
+    });
+    $("#dur", wrap).append(b);
+  });
+
+  STYLES.forEach((s) => {
+    const b = el(`<button class="option" type="button" aria-pressed="${S.prefs.coach_style === s.key}">
+      <strong>${esc(s.label)}</strong><span class="small muted">${esc(s.hint)}</span></button>`);
+    b.addEventListener("click", () => {
+      S.prefs.coach_style = s.key;
+      [...$("#style", wrap).children].forEach((c) => c.setAttribute("aria-pressed", "false"));
+      b.setAttribute("aria-pressed", "true");
+    });
+    $("#style", wrap).append(b);
+  });
+
+  bindMic($("#mic", wrap), $("#concerns", wrap), $("#micStatus", wrap));
+
+  $("#done", wrap).addEventListener("click", () => {
+    S.prefs.concerns = $("#concerns", wrap).value.trim();
+    finishOnboarding();
+  });
+  return wrap;
+}
+
+function finishOnboarding() {
+  S.onboarded = true;
+  localStorage.setItem("flowreset.onboarded", "1");
+  S.intake.duration_min = S.prefs.preferred_duration_min;
+  S.intake.can_stand = S.prefs.can_stand;
+  savePrefs();
+  go("home");
+}
+
+function savePrefs() {
+  if (mock) { Object.assign(mock.prefs, S.prefs); return; }
+  fetch("/api/prefs", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(S.prefs),
+  }).catch(() => {});
+}
+
+function viewHome() {
+  const first = S.dashboard?.summary?.top_symptom;
+  const wrap = el(`<div class="stack">
+    <div class="stack-sm">
+      <h1>What's bothering you?</h1>
+      <p class="muted">Say it in your own words, or pick an area.</p>
+    </div>
+
+    <div class="card stack">
+      <textarea id="req" rows="2" placeholder="My shoulders feel tight. I have 90 seconds and need to stay seated."></textarea>
+      <div class="grid symptom-grid" id="cards"></div>
+      <div class="stack-sm">
+        <span class="eyebrow">How long do you have?</span>
+        <div class="row" id="dur"></div>
+      </div>
+      <div class="stack-sm">
+        <span class="eyebrow">Can you stand?</span>
+        <div class="row" id="stand"></div>
+      </div>
+      <div class="row">
+        <button class="btn" id="ask">Ask the agent</button>
+        <button class="btn secondary" id="mic" type="button" aria-pressed="false">🎤 Speak instead</button>
+        <span class="small muted" id="hint">The agent reads your history and picks from the approved library.</span>
+      </div>
+      <p class="tiny muted" id="micStatus"></p>
+    </div>
+
+    ${first ? `<div class="notice small">Heads up — <strong>${esc(S.dashboard.symptom_labels?.[first] || first)}</strong>
+      has come up most this week. FlowReset will offer that first if you don't say otherwise.</div>` : ""}
+  </div>`);
+
+  SYMPTOM_CARDS.forEach((s) => {
+    const b = el(`<button class="symptom" type="button">
+      <span class="glyph">${s.glyph}</span><strong>${esc(s.label)}</strong>
+      <span class="small muted">${esc(s.hint)}</span></button>`);
+    b.addEventListener("click", () => {
+      // Tapping a card *is* an explicit choice of area.
+      S.intake.symptom = s.key;
+      S.intake.touched.symptom = true;
+      requestPlan(`My ${s.label.toLowerCase()} need a reset. I have ${S.intake.duration_min} minutes and ${S.intake.can_stand ? "can stand" : "need to stay seated"}.`);
+    });
+    $("#cards", wrap).append(b);
+  });
+
+  [1, 2, 3, 5, 10].forEach((m) => {
+    const b = el(`<button class="chip" type="button" aria-pressed="${S.intake.duration_min === m}">${m} min</button>`);
+    b.addEventListener("click", () => {
+      S.intake.duration_min = m;
+      S.intake.touched.duration = true;
+      [...$("#dur", wrap).children].forEach((c) => c.setAttribute("aria-pressed", "false"));
+      b.setAttribute("aria-pressed", "true");
+    });
+    $("#dur", wrap).append(b);
+  });
+
+  [["Yes", true], ["Seated only", false]].forEach(([label, val]) => {
+    const b = el(`<button class="chip" type="button" aria-pressed="${S.intake.can_stand === val}">${label}</button>`);
+    b.addEventListener("click", () => {
+      S.intake.can_stand = val;
+      S.intake.touched.stand = true;
+      [...$("#stand", wrap).children].forEach((c) => c.setAttribute("aria-pressed", "false"));
+      b.setAttribute("aria-pressed", "true");
+    });
+    $("#stand", wrap).append(b);
+  });
+
+  const ask = () => {
+    const text = $("#req", wrap).value.trim();
+    requestPlan(text || `I need a ${S.intake.duration_min} minute reset.`);
+  };
+  $("#ask", wrap).addEventListener("click", ask);
+  $("#req", wrap).addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) ask();
+  });
+  bindMic($("#mic", wrap), $("#req", wrap), $("#micStatus", wrap));
+  return wrap;
+}
+
+function requestPlan(text) {
+  S.planning = true;
+  S.trace = [];
+  $("#traceList").innerHTML = "";
+  const hint = $("#hint");
+  if (hint) hint.textContent = "Thinking on the box…";
+  const btn = $("#ask");
+  if (btn) { btn.disabled = true; btn.textContent = "Working…"; }
+  const override = {};
+  if (S.intake.touched.symptom && S.intake.symptom) override.symptom = S.intake.symptom;
+  if (S.intake.touched.duration) override.duration_min = S.intake.duration_min;
+  if (S.intake.touched.stand) override.can_stand = S.intake.can_stand;
+
+  send({ type: "intake", text, override: Object.keys(override).length ? override : undefined });
+}
+
+function viewPlan() {
+  const p = S.plan;
+  const lib = mock ? mock.routines().moves : null;
+  const name = (k) => lib?.[k]?.name || k.replace(/_/g, " ");
+  const secs = (k) => lib?.[k]?.seconds || null;
+
+  const wrap = el(`<div class="stack">
+    <div class="row"><span class="pill info">Agent plan</span>
+      <span class="pill">${esc(p.symptom_label)}</span>
+      <span class="pill">${p.duration_min} min</span>
+      <span class="pill">${p.moves.length} moves</span></div>
+
+    <div class="card stack">
+      <h1>${esc(p.symptom_label)} reset</h1>
+      <p class="hero-lede">${esc(S.coachText)}</p>
+
+      <ol class="plan-moves">
+        ${p.moves.map((k, i) => `<li><span>${esc(p.move_names?.[i] || name(k))}</span>
+          ${secs(k) ? `<span class="dur">${secs(k)}s</span>` : ""}</li>`).join("")}
+      </ol>
+
+      ${S.why.length ? `<div class="why"><strong class="small">Why this?</strong>
+        <ul>${S.why.map((w) => `<li>${esc(w)}</li>`).join("")}</ul></div>` : ""}
+
+      <div class="stack-sm">
+        <span class="eyebrow">Camera guidance</span>
+        <p class="small muted">${p.camera_useful
+          ? "Optional. If you turn it on, the pose model on the box counts your reps and watches your range — frames are analysed in memory and never stored."
+          : "This routine doesn't need the camera."}</p>
+        <div class="row">
+          <button class="btn" id="startCam" ${p.camera_useful ? "" : "hidden"}>Start with camera</button>
+          <button class="btn ${p.camera_useful ? "secondary" : ""}" id="startNoCam">Start without camera</button>
+          <button class="btn subtle" id="back">Something else</button>
+        </div>
+      </div>
+    </div>
+  </div>`);
+
+  $("#startCam", wrap).addEventListener("click", () => beginSession(true));
+  $("#startNoCam", wrap).addEventListener("click", () => beginSession(false));
+  $("#back", wrap).addEventListener("click", () => { S.plan = null; go("home"); });
+  return wrap;
+}
+
+async function beginSession(withCamera) {
+  let camera = false;
+  if (withCamera) camera = await startCamera();
+  S.cameraOn = camera;
+  send({ type: "start_reset", camera, symptom: S.plan.symptom, duration_min: S.plan.duration_min, can_stand: S.intake.can_stand });
+  S.screen = "session";
+  render();
+}
+
+function viewSession() {
+  const p = S.plan;
+  const wrap = el(`<div class="stack">
+    <div class="steps" id="steps">${p.moves.map(() => "<span></span>").join("")}</div>
+
+    <div class="session">
+      <div class="card timer-card">
+        <div class="ring">
+          <svg viewBox="0 0 120 120" aria-hidden="true">
+            <circle class="track" cx="60" cy="60" r="52" fill="none" stroke-width="8"></circle>
+            <circle class="fill" id="ringFill" cx="60" cy="60" r="52" fill="none" stroke-width="8"
+              stroke-dasharray="326.7" stroke-dashoffset="0"></circle>
+          </svg>
+          <div class="label" id="clock">0:00</div>
+        </div>
+        <div class="stack-sm">
+          <div class="move-name" id="moveName">Getting ready…</div>
+          <p class="move-cue" id="moveCue"></p>
+        </div>
+        <div class="row">
+          <button class="btn secondary" id="pause">Pause</button>
+          <button class="btn subtle" id="skip">Skip move</button>
+          <button class="btn subtle" id="stop">End</button>
+        </div>
+      </div>
+
+      <div class="stack">
+        <div class="cue-banner" id="cueBanner"></div>
+        <div class="cam-wrap" id="camWrap">
+          <video id="cam" autoplay muted playsinline></video>
+          <canvas id="overlay"></canvas>
+          <div class="cam-off" id="camOff" ${S.cameraOn ? "hidden" : ""}>
+            <strong>Camera is off</strong>
+            <p class="small muted">Text and voice guidance only. You can turn the camera
+              on at any time — or leave it off entirely.</p>
+            <button class="btn secondary" id="camOn">Turn on camera guidance</button>
+          </div>
+          <div class="cam-flag" id="camFlag" ${S.cameraOn ? "" : "hidden"}>
+            ${S.preview ? "Preview skeleton · synthetic" : "Pose on GB10 · not recorded"}
+          </div>
+        </div>
+        <div class="row small muted" id="metrics"></div>
+      </div>
+    </div>
+  </div>`);
+
+  $("#pause", wrap).addEventListener("click", (e) => {
+    const on = e.target.textContent === "Pause";
+    e.target.textContent = on ? "Resume" : "Pause";
+    send({ type: "pause", on });
+  });
+  $("#skip", wrap).addEventListener("click", () => send({ type: "skip" }));
+  $("#stop", wrap).addEventListener("click", () => finishSession(false));
+  $("#camOn", wrap).addEventListener("click", async () => {
+    const ok = await startCamera();
+    S.cameraOn = ok;
+    send({ type: "camera", on: ok });
+    $("#camOff", wrap).hidden = ok;
+    $("#camFlag", wrap).hidden = !ok;
+    if (!ok) {
+      $("#camOff", wrap).innerHTML =
+        `<strong>No camera access</strong><p class="small muted">That's completely fine —
+         the routine works with text and voice guidance. Nothing else changes.</p>`;
+      $("#camOff", wrap).hidden = false;
+    }
+  });
+  return wrap;
+}
+
+function paintSession() {
+  const live = S.live;
+  const p = S.plan;
+  if (!live || !p) return;
+
+  const lib = mock ? mock.routines().moves : null;
+  const total = lib?.[live.move]?.seconds || 45;
+  const elapsed = live.hold_seconds || 0;
+  const remain = Math.max(0, Math.ceil(total - elapsed));
+
+  const clock = $("#clock");
+  if (clock) clock.textContent = `${Math.floor(remain / 60)}:${String(remain % 60).padStart(2, "0")}`;
+
+  const ring = $("#ringFill");
+  if (ring) {
+    const C = 2 * Math.PI * 52;
+    ring.style.strokeDashoffset = String(C * Math.min(1, elapsed / total));
+  }
+
+  const nameEl = $("#moveName");
+  if (nameEl) nameEl.textContent = lib?.[live.move]?.name || String(live.move || "").replace(/_/g, " ");
+  const cueEl = $("#moveCue");
+  if (cueEl) cueEl.textContent = lib?.[live.move]?.cues?.during || "";
+
+  const steps = $("#steps");
+  if (steps) {
+    [...steps.children].forEach((s, i) => {
+      s.dataset.done = String(i < live.move_index);
+      s.dataset.active = String(i === live.move_index);
+    });
+  }
+
+  const metrics = $("#metrics");
+  if (metrics) {
+    metrics.innerHTML = S.cameraOn
+      ? `<span class="pill">framing: ${esc(S.framing)}</span>
+         <span class="pill ${live.tempo === "good" ? "good" : "warn"}">tempo: ${esc(live.tempo)}</span>
+         <span class="pill">reps: ${live.rep}/${live.target_reps}</span>
+         <span class="pill ${live.form === "ok" ? "good" : "warn"}">form: ${esc(live.form)}</span>`
+      : `<span class="pill">Guidance: text and voice</span>`;
+  }
+
+  drawOverlay();
+}
+
+function paintCue() {
+  const banner = $("#cueBanner");
+  if (banner) banner.textContent = S.cue || "";
+}
+
+function drawOverlay() {
+  const canvas = $("#overlay");
+  if (!canvas || !S.cameraOn) return;
+  const wrap = $("#camWrap");
+  if (canvas.width !== wrap.clientWidth || canvas.height !== wrap.clientHeight) {
+    canvas.width = wrap.clientWidth;
+    canvas.height = wrap.clientHeight;
+  }
+  drawSkeleton(canvas, S.keypoints, getComputedStyle(document.body).getPropertyValue("--accent").trim());
+}
+
+async function startCamera() {
+  try {
+    videoStream = await navigator.mediaDevices.getUserMedia({
+      video: { width: 640, height: 480, facingMode: "user" },
+      audio: false,
+    });
+  } catch {
+    return false;
+  }
+  const video = $("#cam");
+  if (video) {
+    video.srcObject = videoStream;
+    await video.play().catch(() => {});
+  }
+  startFrameLoop();
+  return true;
+}
+
+/* The only place camera data moves. Frames go to the box over the LAN and
+   nowhere else — there is no other fetch/send of image data in this file. */
+function startFrameLoop() {
+  stopFrameLoop();
+  if (S.preview) return; // nothing to send frames to
+  const video = $("#cam");
+  const scratch = document.createElement("canvas");
+  scratch.width = 320;
+  scratch.height = 240;
+  const ctx = scratch.getContext("2d");
+  frameTimer = setInterval(() => {
+    if (!video || video.readyState < 2) return;
+    ctx.drawImage(video, 0, 0, scratch.width, scratch.height);
+    const data = scratch.toDataURL("image/jpeg", 0.6).split(",")[1];
+    send({ type: "frame", data });
+  }, 1000 / 10);
+}
+
+function stopFrameLoop() {
+  if (frameTimer) clearInterval(frameTimer);
+  frameTimer = null;
+}
+
+function stopCamera() {
+  stopFrameLoop();
+  if (videoStream) videoStream.getTracks().forEach((t) => t.stop());
+  videoStream = null;
+  S.cameraOn = false;
+}
+
+function finishSession(completed) {
+  stopCamera();
+  S.completed = completed;
+  S.response = null;
+  S.insight = null;
+  S.screen = "complete";
+  render();
+}
+
+function viewComplete() {
+  const wrap = el(`<div class="stack">
+    <div class="card stack">
+      <span class="eyebrow">${S.completed ? "Reset complete" : "Ended early"}</span>
+      <h1>How do you feel?</h1>
+      <p class="muted">One tap. This is the only thing FlowReset asks of you, and it's
+        what makes the next recommendation better.</p>
+      <div class="row" id="fb">
+        <button class="btn" data-r="better">Better</button>
+        <button class="btn secondary" data-r="same">About the same</button>
+        <button class="btn secondary" data-r="worse">Worse</button>
+      </div>
+      <p class="small muted">Camera off. Nothing from this session was recorded.</p>
+    </div>
+    <div id="after"></div>
+  </div>`);
+
+  $("#fb", wrap).addEventListener("click", (e) => {
+    const r = e.target.dataset?.r;
+    if (!r) return;
+    S.response = r;
+    send({ type: "end_session", completed: S.completed, response: r });
+    setTimeout(() => {
+      loadDashboard().then(() => {
+        const after = $("#after");
+        if (!after) return;
+        after.innerHTML = "";
+        after.append(el(`<div class="card stack">
+          <h2>Saved locally</h2>
+          <p>${esc(S.coachText || "Recorded.")}</p>
+          ${S.insight ? `<div class="why"><strong class="small">One pattern</strong>
+            <p class="small" style="color:var(--accent-ink);margin-top:6px">${esc(S.insight)}</p></div>` : ""}
+          <div class="row">
+            <button class="btn" id="toDash">See progress</button>
+            <button class="btn subtle" id="again">Back to home</button>
+          </div>
+        </div>`));
+        $("#toDash").addEventListener("click", () => go("dashboard"));
+        $("#again").addEventListener("click", () => { S.plan = null; go("home"); });
+      });
+    }, 400);
+    [...$("#fb", wrap).children].forEach((b) => (b.disabled = true));
+  });
+  return wrap;
+}
+
+function viewEscalate() {
+  const wrap = el(`<div class="card stack">
+    <span class="eyebrow">Let's pause here</span>
+    <h1>This one's worth a professional's eyes</h1>
+    <p class="hero-lede">${esc(S.coachText)}</p>
+    <div class="row"><button class="btn secondary" id="back">Back to home</button></div>
+  </div>`);
+  $("#back", wrap).addEventListener("click", () => go("home"));
+  return wrap;
+}
+
+function viewDashboard() {
+  const d = S.dashboard;
+  if (!d) return el(`<div class="notice">Loading your history…</div>`);
+  const s = d.summary;
+  const labels = d.symptom_labels || {};
+
+  const wrap = el(`<div class="stack">
+    <div class="stack-sm"><h1>Your progress</h1>
+      <p class="muted">Everything here is computed on this machine from your own sessions.</p></div>
+
+    <div class="grid stat-row">
+      <div class="card stat"><div class="num">${s.sessions_completed}</div>
+        <div class="lbl">resets completed · 7 days</div></div>
+      <div class="card stat"><div class="num">${Math.round(s.better_rate * 100)}%</div>
+        <div class="lbl">felt better afterwards</div></div>
+      <div class="card stat"><div class="num">${Math.round(s.completion_rate * 100)}%</div>
+        <div class="lbl">of started resets finished</div></div>
+      <div class="card stat"><div class="num">${s.streak_days}</div>
+        <div class="lbl">day streak</div></div>
+    </div>
+
+    <div class="dash-grid">
+      <div class="card stack">
+        <div class="stack-sm"><h2>Am I building the habit?</h2>
+          <p class="small muted">Completed resets per day.</p></div>
+        <div id="bars"></div>
+      </div>
+
+      <div class="stack">
+        <div class="card stack">
+          <div class="stack-sm"><h2>Is it helping?</h2>
+            <p class="small muted">How you rated each completed reset.</p></div>
+          <div id="split"></div>
+        </div>
+        <div class="card stack">
+          <div class="stack-sm"><h2>Where do I need support?</h2>
+            <p class="small muted">Which areas you reset most often.</p></div>
+          <div id="areas"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card stack">
+      <div class="row"><h2>Recent sessions</h2>
+        <span class="pill" style="margin-left:auto">demo history is labelled</span></div>
+      <div class="table-scroll"><table>
+        <thead><tr><th>When</th><th>Area</th><th>Length</th><th>Routine</th><th>Result</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table></div>
+    </div>
+  </div>`);
+
+  $("#bars", wrap).append(charts.dayBars(d.daily));
+  $("#split", wrap).append(charts.responseSplit(s.responses));
+  $("#areas", wrap).append(charts.areaBars(s.by_symptom, labels));
+
+  const tbody = $("#rows", wrap);
+  (d.recent || []).forEach((r) => {
+    const when = new Date(r.started_at);
+    const badge = r.response
+      ? `<span class="pill ${r.response === "better" ? "good" : r.response === "worse" ? "warn" : ""}">${r.response}</span>`
+      : `<span class="pill">not finished</span>`;
+    tbody.append(el(`<tr data-live="${!r.is_demo}">
+      <td>${when.toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+        <span class="muted tiny">${when.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}</span></td>
+      <td>${esc(labels[r.symptom] || r.symptom)}</td>
+      <td>${r.duration_min} min</td>
+      <td class="small muted">${esc((r.moves || []).map((m) => m.replace(/_/g, " ")).join(", "))}</td>
+      <td>${badge} ${r.is_demo ? "" : '<span class="pill info">this session</span>'}</td>
+    </tr>`));
+  });
+  return wrap;
+}
+
+function viewWorkspace() {
+  const payload = S.workspace;
+  if (!payload) { loadWorkspace(); return el(`<div class="notice">Loading workspace view…</div>`); }
+  const w = payload.workspace;
+  const labels = payload.symptom_labels || {};
+
+  if (w.suppressed) {
+    return el(`<div class="stack">
+      <h1>Workspace</h1>
+      <div class="notice"><strong>Nothing to report yet.</strong>
+        <p class="small" style="margin-top:6px">${esc(w.reason)}</p>
+        <p class="small muted" style="margin-top:6px">${w.participants} of ${w.k_anonymity} needed.</p></div>
+    </div>`);
+  }
+
+  const wrap = el(`<div class="stack">
+    <div class="stack-sm">
+      <div class="row"><h1>Workspace</h1><span class="pill info" style="margin-left:auto">People Ops view</span></div>
+      <p class="muted">Aggregate engagement for people who opted in. Last ${w.days} days.</p>
+    </div>
+
+    <div class="notice small">
+      <strong>What a manager can and cannot see.</strong>
+      No individual is identifiable here: every figure is a count over a cohort of at least
+      ${w.k_anonymity} opted-in people, and any team below that floor is suppressed entirely
+      ${w.suppressed_teams ? ` (${w.suppressed_teams} ${w.suppressed_teams === 1 ? "team is" : "teams are"} hidden for that reason)` : ""}.
+      There is no per-person view, no video, no discomfort detail, and no way to request one —
+      the aggregation happens in the query, not in the interface.
+    </div>
+
+    <div class="grid stat-row">
+      <div class="card stat"><div class="num">${w.participants}</div><div class="lbl">people opted in</div></div>
+      <div class="card stat"><div class="num">${w.per_person_per_week}</div><div class="lbl">resets per person per week</div></div>
+      <div class="card stat"><div class="num">${Math.round(w.better_rate * 100)}%</div><div class="lbl">reported feeling better</div></div>
+      <div class="card stat"><div class="num">${Math.round(w.completion_rate * 100)}%</div><div class="lbl">completion rate</div></div>
+    </div>
+
+    <div class="card stack">
+      <div class="stack-sm"><h2>Reported outcome</h2>
+        <p class="small muted">Self-reported, aggregated across ${w.sessions_completed} completed resets.</p></div>
+      <div id="split"></div>
+    </div>
+
+    <div class="card stack">
+      <div class="stack-sm"><h2>Where the discomfort sits</h2>
+        <p class="small muted">Useful for ergonomics decisions — which is the point of this view.</p></div>
+      <div id="areas"></div>
+    </div>
+
+    <div class="card stack">
+      <h2>By team</h2>
+      <div class="table-scroll"><table>
+        <thead><tr><th>Team</th><th>Opted in</th><th>Resets</th><th>Per person / week</th><th>Completion</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table></div>
+      ${w.suppressed_teams ? `<p class="tiny muted">${w.suppressed_teams} team(s) hidden:
+        fewer than ${w.k_anonymity} people opted in.</p>` : ""}
+    </div>
+  </div>`);
+
+  $("#split", wrap).append(charts.responseSplit(w.responses));
+  $("#areas", wrap).append(charts.areaBars(w.by_symptom, labels));
+  (w.teams || []).forEach((t) => {
+    $("#rows", wrap).append(el(`<tr>
+      <td><strong>${esc(t.team)}</strong></td><td>${t.participants}</td><td>${t.sessions}</td>
+      <td>${t.per_person_per_week}</td><td>${Math.round(t.completion_rate * 100)}%</td></tr>`));
+  });
+  return wrap;
+}
+
+function viewSettings() {
+  const h = S.health;
+  const wrap = el(`<div class="stack">
+    <h1>Settings</h1>
+
+    <div class="card stack">
+      <h2>Coaching</h2>
+      <div class="stack-sm"><span class="eyebrow">Coach style</span>
+        <div class="grid option-grid" id="style"></div></div>
+      <div class="stack-sm"><span class="eyebrow">Default session length</span>
+        <div class="row" id="dur"></div></div>
+      <div class="switch"><div class="txt"><strong>Spoken cues</strong>
+        <span class="small muted">Piper text-to-speech, synthesised on the box.</span></div>
+        <button class="toggle" id="voice" aria-pressed="${S.prefs.voice}" aria-label="Spoken cues"></button></div>
+    </div>
+
+    <div class="card stack">
+      <h2>Camera &amp; privacy</h2>
+      <div class="switch"><div class="txt"><strong>Watch mode</strong>
+        <span class="small muted">Off by default. When on, FlowReset tracks accumulated sitting
+        and neck time and <em>offers</em> a reset — it never starts one, and it stops asking if
+        you decline. Turning it off clears what it accumulated.</span></div>
+        <button class="toggle" id="watch" aria-pressed="${S.prefs.watch_mode}" aria-label="Watch mode"></button></div>
+      <div class="switch"><div class="txt"><strong>Share anonymous totals with my workspace</strong>
+        <span class="small muted">Sends counts only, and only inside a cohort of 5+ people.
+        Never your video, your symptoms, or your individual sessions.</span></div>
+        <button class="toggle" id="ws" aria-pressed="${S.prefs.workspace_opt_in}" aria-label="Workspace sharing"></button></div>
+      <div class="row">
+        <button class="btn secondary" id="export">Export my data</button>
+        <button class="btn subtle" id="wipe" style="color:var(--rose)">Delete my local history</button>
+      </div>
+    </div>
+
+    <div class="card stack">
+      <h2>Where the AI runs</h2>
+      <div class="stack-sm small">
+        <div class="row"><span class="pill ${S.preview ? "warn" : h?.llm?.reachable ? "good" : "warn"}">
+          language</span> <code>${esc(h?.llm?.reason_model || "—")}</code>
+          <span class="muted">@ ${esc(h?.llm?.endpoint || "—")}</span></div>
+        <div class="row"><span class="pill ${h?.pose?.available ? "good" : "warn"}">vision</span>
+          <code>${esc(h?.pose?.model || "—")}</code></div>
+        <div class="row"><span class="pill ${h?.tts?.available ? "good" : ""}">voice</span>
+          <code>${esc(h?.tts?.engine || "—")}</code></div>
+        <div class="row"><span class="pill">runtime</span><code>${esc(h?.runtime?.runtime || "—")}</code></div>
+        <div class="row"><span class="pill good">external AI APIs</span><code>none configured</code></div>
+        <div class="row"><span class="pill good">frames stored</span><code>${h?.pose?.frames_stored ?? 0}</code></div>
+      </div>
+      <p class="tiny muted">Tools available to the agent:
+        ${esc((h?.runtime?.tools || []).join(", ") || "—")}</p>
+    </div>
+
+    <p class="tiny muted">FlowReset offers movement breaks and form awareness. It is not medical
+      care and does not diagnose or treat anything. For pain that is severe, persistent, or
+      worsening — or numbness, weakness, or vision changes — please see a healthcare professional.</p>
+  </div>`);
+
+  STYLES.forEach((s) => {
+    const b = el(`<button class="option" type="button" aria-pressed="${S.prefs.coach_style === s.key}">
+      <strong>${esc(s.label)}</strong><span class="small muted">${esc(s.hint)}</span></button>`);
+    b.addEventListener("click", () => {
+      S.prefs.coach_style = s.key;
+      [...$("#style", wrap).children].forEach((c) => c.setAttribute("aria-pressed", "false"));
+      b.setAttribute("aria-pressed", "true");
+      savePrefs();
+    });
+    $("#style", wrap).append(b);
+  });
+
+  [1, 2, 3, 5, 10].forEach((m) => {
+    const b = el(`<button class="chip" type="button" aria-pressed="${S.prefs.preferred_duration_min === m}">${m} min</button>`);
+    b.addEventListener("click", () => {
+      S.prefs.preferred_duration_min = m;
+      [...$("#dur", wrap).children].forEach((c) => c.setAttribute("aria-pressed", "false"));
+      b.setAttribute("aria-pressed", "true");
+      savePrefs();
+    });
+    $("#dur", wrap).append(b);
+  });
+
+  const toggle = (id, key, extra) => {
+    const b = $(`#${id}`, wrap);
+    b.addEventListener("click", () => {
+      S.prefs[key] = !S.prefs[key];
+      b.setAttribute("aria-pressed", String(S.prefs[key]));
+      savePrefs();
+      if (extra) extra(S.prefs[key]);
+    });
+  };
+  toggle("voice", "voice");
+  toggle("watch", "watch_mode", (on) => send({ type: "watch_mode", on }));
+  toggle("ws", "workspace_opt_in");
+
+  $("#export", wrap).addEventListener("click", async () => {
+    const data = mock ? { prefs: S.prefs, sessions: mock.sessions } :
+      await fetch("/api/export").then((r) => r.json());
+    const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "flowreset-export.json";
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  $("#wipe", wrap).addEventListener("click", async () => {
+    if (!confirm("Delete all local FlowReset history? This cannot be undone.")) return;
+    if (mock) mock.sessions = [];
+    else await fetch("/api/history", { method: "DELETE" }).catch(() => {});
+    S.dashboard = null;
+    await loadDashboard();
+    go("dashboard");
+  });
+
+  return wrap;
+}
+
+/* ─────────────────────── voice input (P1) ───────────────────────
+ *
+ * Records with MediaRecorder and POSTs the audio to the box, where local
+ * Whisper transcribes it. Deliberately NOT the Web Speech API: that streams
+ * microphone audio to Google and would break both the competition rule and
+ * every privacy claim we make. See server/stt.py.
+ */
+
+let recorder = null;
+let recordedChunks = [];
+
+function sttAvailable() {
+  return !S.preview && !!S.health?.stt?.available && !!navigator.mediaDevices?.getUserMedia;
+}
+
+/** Wire a mic button to a target textarea. Returns nothing; degrades silently. */
+function bindMic(button, textarea, statusEl) {
+  if (!button) return;
+
+  if (!sttAvailable()) {
+    button.hidden = true;
+    if (statusEl && S.preview) {
+      statusEl.textContent = "Voice input needs the box — type instead for now.";
+    } else if (statusEl && S.health?.stt?.error) {
+      statusEl.textContent = "Voice input unavailable — type instead.";
+    }
+    return;
+  }
+
+  const setState = (label, pressed) => {
+    button.textContent = label;
+    button.setAttribute("aria-pressed", String(pressed));
+  };
+
+  button.addEventListener("click", async () => {
+    if (recorder && recorder.state === "recording") {
+      recorder.stop();
+      return;
+    }
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch {
+      if (statusEl) statusEl.textContent = "No microphone access — type instead.";
+      return;
+    }
+
+    recordedChunks = [];
+    recorder = new MediaRecorder(stream);
+    recorder.addEventListener("dataavailable", (e) => {
+      if (e.data.size) recordedChunks.push(e.data);
+    });
+    recorder.addEventListener("stop", async () => {
+      stream.getTracks().forEach((t) => t.stop());
+      setState("Transcribing…", false);
+      const blob = new Blob(recordedChunks, { type: "audio/webm" });
+      const b64 = await new Promise((resolve) => {
+        const fr = new FileReader();
+        fr.onload = () => resolve(String(fr.result).split(",")[1]);
+        fr.readAsDataURL(blob);
+      });
+      let result = { ok: false };
+      try {
+        result = await fetch("/api/transcribe", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ audio: b64 }),
+        }).then((r) => r.json());
+      } catch {
+        /* fall through to the error path below */
+      }
+      setState("🎤 Speak instead", false);
+      if (result.ok && result.text) {
+        textarea.value = textarea.value ? `${textarea.value} ${result.text}` : result.text;
+        if (statusEl) statusEl.textContent = "Transcribed on the box. Edit it if you like.";
+      } else if (statusEl) {
+        statusEl.textContent = result.error ? "Didn't catch that — try again or type it." : "";
+      }
+    });
+
+    recorder.start();
+    setState("⏹ Stop recording", true);
+    if (statusEl) statusEl.textContent = "Recording. Audio is transcribed on the box, not stored.";
+  });
+}
+
+window.addEventListener("beforeunload", stopCamera);
+boot();
