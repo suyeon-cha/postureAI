@@ -436,7 +436,13 @@ function render() {
     help: viewHelp,
   }[S.screen];
   app.append(view());
-  if (S.screen === "session") { paintSession(); paintCue(); }
+  // render() wipes #app, so every re-render destroys the <video> the camera
+  // stream was bound to and builds an empty one. Several paths re-render mid
+  // session (session_started echoing back from the box, screen changes), and
+  // each one would otherwise leave a live stream orphaned behind a black
+  // panel. Re-attaching here covers all of them; attachStream() no-ops when
+  // there is no stream or no element.
+  if (S.screen === "session") { attachStream(); paintSession(); paintCue(); }
   window.scrollTo({ top: 0, behavior: "instant" });
   app.focus({ preventScroll: true });
 }
