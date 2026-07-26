@@ -13,3 +13,10 @@ venv/
 *.wav
 
 .DS_Store
+
+# local memory
+*.db
+flowreset.db
+
+# env
+.env
