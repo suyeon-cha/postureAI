@@ -81,27 +81,79 @@ Dell Pro Max with GB10 ───────────────────
        │ events (contracts.md §2)
   agent/       FlowReset agent: intake → tools → approved routine → cues → memory
        │       reasoning + language: Qwen via local Ollama
-       │       form judge (rare, one frame): qwen2.5vl via local Ollama
+       │       form judge (rare, one frame): Gemma via local Ollama
   server/      FastAPI, WebSocket at /ws, Piper TTS, Whisper STT, SQLite, serves ui/
 ```
 
-All inference is local: **`qwen3:8b`** (agent reasoning and coach language) and
-**`qwen2.5vl:7b`** (vision form judge) via Ollama, MediaPipe pose, Piper TTS,
-faster-whisper STT. `agent/llm.py` refuses any non-loopback/non-private inference endpoint at
-import time — a stray cloud URL crashes the app instead of quietly working.
+All inference is local. `agent/llm.py` refuses any non-loopback/non-private inference endpoint
+at import time — a stray cloud URL crashes the app instead of quietly working.
+
+### What actually runs on the GB10
+
+The code's defaults name models that are **not** on this box. `run-demo.sh` overrides every one
+of them, so use that script rather than a bare `uvicorn` command.
+
+| Job | Model in use | Repo default | Why it differs |
+|---|---|---|---|
+| Agent reasoning, coach language | **`qwen3:14b`** | `qwen3:8b` | 8b was never copied from the drive; 14b was |
+| Vision form judge | **`gemma4:latest`** | `qwen2.5vl:7b` | No qwen-VL on the drive. Gemma 4 is the **only** multimodal model there — it is the sole manifest carrying an `image.projector` layer, and Ollama reports `capabilities: [completion, vision, audio, tools, thinking]` |
+| Pose | `pose_landmarker_heavy.task` (MediaPipe) | same | ~27 ms/frame at 720p, ~12 ms at 640×360, CPU |
+| Voice out | **Piper `en_US-lessac-medium`** | `en_US-amy-medium` | lessac is the voice on the drive. The wheel also installs the `piper` binary *inside* the venv, not on `PATH` |
+| Voice in | `faster-whisper base.en` | same | CTranslate2 format. A `whisper.cpp` `ggml-*.bin` will **not** work here — different format, not interchangeable |
+
+Measured on this hardware: pose ~12–27 ms, Piper ~110 ms to synthesise a cue, a vision call
+~11 s, and a normal `qwen3:14b` answer ~3.4 s. Only the first two are fast enough to sit inside
+the movement loop, which is why spoken form corrections come from the deterministic detectors
+rather than from a model.
 
 ### The agent is ours; the required framework is not the agent
 
 `agent/runtime.py` is an adapter with one interface: `run(messages, tools, on_step)`.
 
-- `native` — a complete, working tool-calling loop against local Qwen. **Default.**
-- `nemoclaw` / `openclaw` — thin adapters for the approved NeMoClaw or OpenClaw runtime.
+- `native` — a complete, working tool-calling loop against local Qwen. **Currently the default.**
+- `openclaw` — **implemented and verified working** on this box.
+- `nemoclaw` — still a stub; NeMoClaw is not installed here.
 
-**Competition gate:** `native` is useful for development but is not an approved judging
-runtime. Before submission, complete the event-image adapter in `agent/runtime.py`, set
-`FLOWRESET_RUNTIME=nemoclaw` or `FLOWRESET_RUNTIME=openclaw`, and verify that `/api/health`
-and the visible agent trace report that runtime. Do not claim rules compliance while the
-runtime still reports `native`.
+#### OpenClaw: how it is wired, and why it is not the default
+
+OpenClaw ships as a **Node CLI, not a Python package**. The original adapter did
+`import openclaw`, which can never succeed, so the app silently fell back to `native` no matter
+what `FLOWRESET_RUNTIME` said. `_run_openclaw` now drives the real CLI as a subprocess and
+parses `meta.finalAssistantVisibleText` and `meta.toolSummary.tools` out of its JSON.
+
+Because a Node CLI cannot import our Python tools, they are exposed over **MCP**
+(`agent/mcp_server.py`, a dependency-free JSON-RPC stdio server). OpenClaw spawns it, lists the
+tools, and calls them — the *same* functions the native loop calls, so both runtimes exercise
+identical behaviour. Registered once with:
+
+```bash
+openclaw config set gateway.mode local
+openclaw config patch --file deploy/openclaw-provider.json5   # point it at local Ollama
+openclaw agents add flowreset --workspace <dir> --model ollama/qwen3:14b --non-interactive
+openclaw mcp add flowreset --command <venv>/bin/python --arg -m --arg agent.mcp_server \
+    --cwd <repo root> --parallel
+```
+
+Verified end to end: the agent calls `get_user_context` and `select_approved_routine` and picks
+a real library routine, with `winnerProvider: ollama`, `winnerModel: qwen3:14b`,
+`fallbackUsed: false`.
+
+**The catch is latency: 50–100 s per turn.** Roughly 12 s of that is model time and the rest is
+node start-up. The cause is prompt size, not model weight — OpenClaw injects ~18 k tokens of its
+own scaffolding into every turn (`schemaChars: 37608`). The same `qwen3:14b` answers a normal
+prompt in 3.4 s and an 18 k-token one in 25.3 s. Restricting tools via `tools.allow` does **not**
+help (17,878 tokens vs 17,991), and neither does a lean agent workspace.
+
+So `run-demo.sh` ships `FLOWRESET_RUNTIME=native` to keep the UI usable, and OpenClaw is one env
+var away:
+
+```bash
+FLOWRESET_RUNTIME=openclaw ./run-demo.sh
+```
+
+**Competition gate:** `native` is not an approved judging runtime. Do not claim rules compliance
+while `/api/health` reports `native` — flip to `openclaw` for the compliance take and budget for
+the wait.
 
 Everything that makes FlowReset a product — system instructions and coach styles, the intake
 state machine, the six tool definitions and implementations, the approved-routine policy,
@@ -192,8 +244,8 @@ separate system and are not part of this employee desktop app.
 | Requirement | FlowReset implementation | Status |
 |---|---|---|
 | Build the agent during the event | Team-authored prompts, state machine, tool registry, policies, memory, safety rules, trace, and UI live in this repository | Implemented |
-| Use NeMoClaw, OpenClaw, or OpenShell | Runtime adapter boundary exists in `agent/runtime.py` | **Must be completed and selected on the event GB10** |
-| Run all inference locally on GB10 | Qwen reasoning and vision via local Ollama, MediaPipe pose, faster-whisper STT, and Piper TTS | Implemented; verify with the actual model assets |
+| Use NeMoClaw, OpenClaw, or OpenShell | OpenClaw adapter implemented in `agent/runtime.py`, tools bridged over MCP, verified making real tool calls on local Ollama | Working; **not the default** — costs 50–100 s/turn, so set `FLOWRESET_RUNTIME=openclaw` for the compliance take |
+| Run all inference locally on GB10 | `qwen3:14b` reasoning and `gemma4:latest` vision via local Ollama, MediaPipe pose, faster-whisper STT, Piper TTS | Implemented and verified on the box |
 | No cloud AI API | `agent/llm.py` rejects non-loopback/non-private inference hosts; no external AI credentials are required | Implemented |
 | Additional models available locally | Model paths are configured for assets copied from the event drive | Verify on GB10 |
 | Demo runs on Dell Pro Max with GB10 | FastAPI, agent, perception, memory, and model services run on the box; MacBook is capture/display only | Verify end to end |
@@ -223,26 +275,57 @@ Models must be available locally on the event drive. Copy them to the box before
 egress:
 
 ```bash
-# Copy/import the event-provided Ollama model blobs into the local Ollama store.
+# Ollama model blobs from the event drive (see copy_models.sh on this box).
+sudo bash copy_models.sh
+
+# Pose weights, Piper voice, Whisper weights.
 cp /Volumes/<drive>/pose_landmarker_heavy.task models/
-cp /Volumes/<drive>/en_US-amy-medium.onnx models/            # optional, voice out
-cp -r /Volumes/<drive>/faster-whisper-base.en models/        # optional, voice in
+cp /Volumes/<drive>/en_US-lessac-medium.onnx* voices/         # voice out
+python -c "from faster_whisper.utils import download_model; \
+           download_model('base.en', output_dir='models/faster-whisper-base.en')"
 ```
 
-Configure the approved runtime, seed the demo history, then run:
+Seed the demo history, then launch with `run-demo.sh` — it pins every model path and name to
+what is actually installed, which the code defaults do not:
 
 ```bash
-cp .env.example .env
-export FLOWRESET_RUNTIME=nemoclaw   # or openclaw after completing the event adapter
 python -m server.seed
-uvicorn server.main:app --host 0.0.0.0 --port 8000
+./run-demo.sh
 ```
+
+`run-demo.sh` is the single source of truth for configuration:
+
+| Variable | Value on this box | What it does |
+|---|---|---|
+| `FLOWRESET_RUNTIME` | `native` | `openclaw` for the compliance take |
+| `FLOWRESET_REASON_MODEL` | `qwen3:14b` | agent reasoning and coach language |
+| `FLOWRESET_VISION_MODEL` | `gemma4:latest` | the only multimodal model available |
+| `FLOWRESET_PIPER_BIN` | `.venv/bin/piper` | not on `PATH`; `shutil.which("piper")` returns `None` without this |
+| `FLOWRESET_PIPER_VOICE` | `voices/en_US-lessac-medium.onnx` | |
+| `FLOWRESET_WHISPER_MODEL` | `models/faster-whisper-base.en` | |
+| `FLOWRESET_DETERMINISTIC` | `1` | pin circuits per check-in (`routines.DEMO_RECIPES`) so every rehearsal and take is identical |
+| `FLOWRESET_COACHED_MOVES` | `lunge` | which moves get **spoken form correction** |
+
+Two demo-shaping notes. The composer was always deterministic in its *ranking* — the executed
+plan comes from `select_approved_routine`, never from model prose — but it shuffled the tail of
+a round when given no seed; `FLOWRESET_DETERMINISTIC=1` pins it.
+
+And `FLOWRESET_COACHED_MOVES` scopes *form correction* only. Uncoached moves are not silent:
+they still get their setup cue, framing prompts, and the mind-muscle cue ("that's your upper
+trapezius working — you should feel a long line down the side of your neck"). What they skip is
+critique, because a confident wrong correction on camera is worse than saying nothing. The skip
+emits a `guardrail` trace entry so the silence is visible as a decision rather than a gap.
+
+It also raises the websocket ping timeouts, so a long local inference cannot drop the camera
+socket mid-session.
 
 On the MacBook, forward the server through SSH:
 
 ```bash
 ssh -L 8000:localhost:8000 dell@<box-ip>
 ```
+
+Any free local port works — `-L 8001:localhost:8000` then `http://localhost:8001` is fine.
 
 Then open `http://localhost:8000`. Using localhost is important because browsers allow webcam
 and microphone access on secure contexts; a plain `http://<box-ip>:8000` page may not receive
