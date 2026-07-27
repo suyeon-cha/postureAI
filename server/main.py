@@ -29,6 +29,10 @@ from . import bus, stt, tts
 
 UI_DIR = Path(__file__).parent.parent / "ui"
 STATE_HZ = 15
+#: Seconds of continuously-good framing before the guide turns ready. Long
+#: enough that settling into position doesn't flicker it, short enough that
+#: someone already standing correctly isn't left waiting.
+FRAME_READY_S = 1.2
 
 app = FastAPI(title="FlowReset", docs_url=None, redoc_url=None)
 
@@ -53,6 +57,10 @@ class SessionRunner:
         self.paused = False
         self.started_at = 0.0
         self._task: asyncio.Task | None = None
+        # Framing has to *hold*, not just touch, before we call it ready:
+        # a landmark flickering in and out would otherwise strobe the
+        # indicator green/red while the user is still settling.
+        self._frame_ok_since: float | None = None
 
     @property
     def active(self) -> bool:
@@ -86,6 +94,24 @@ class SessionRunner:
         self.index = 0
         self.camera_on = False
 
+    def frame_status(self, kp, tracker) -> dict[str, Any]:
+        """Guided-frame state: what this move needs, and whether we have it."""
+        target = detectors.frame_target(tracker.spec) if tracker else "torso"
+        if not self.camera_on:
+            return {"target": target, "seen": "no_person", "ok": False,
+                    "reason": "Camera is off.", "held_s": 0.0, "ready": False}
+        check = detectors.frame_check(kp, target)
+        now = time.monotonic()
+        if check["ok"]:
+            self._frame_ok_since = self._frame_ok_since or now
+            held = now - self._frame_ok_since
+        else:
+            self._frame_ok_since = None
+            held = 0.0
+        check["held_s"] = round(held, 1)
+        check["ready"] = held >= FRAME_READY_S
+        return check
+
     def state(self) -> dict[str, Any]:
         """contracts.md §1 `state`."""
         kp = pose_backend.get_keypoints() if self.camera_on else None
@@ -107,6 +133,7 @@ class SessionRunner:
                 else None
             ),
             "framing": detectors.framing(kp),
+            "frame": self.frame_status(kp, tracker),  # (v1.2) guided-frame gate
             "camera_on": self.camera_on,
         }
 
@@ -337,6 +364,17 @@ async def _handle_ui_message(msg: dict[str, Any]) -> None:
 
     if kind == "pause":
         session.paused = bool(msg.get("on"))
+        return
+
+    if kind == "restart_move":
+        # User confirmed they're in position. Rebuild this move's tracker so
+        # reps, tempo and range all measure from now, discarding whatever was
+        # captured while they were getting into frame.
+        tracker = session.tracker
+        if tracker:
+            session.trackers[session.index] = detectors.build_tracker(
+                tracker.move, tracker.spec
+            )
         return
 
     if kind == "skip":

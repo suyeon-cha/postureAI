@@ -669,6 +669,27 @@ textarea::placeholder { color: var(--ink-3); }
 .video-status[data-state="adjust"] .video-status-dot,
 .video-status[data-state="reframe"] .video-status-dot,
 .video-status[data-state="scanning"] .video-status-dot { background: var(--amber); box-shadow: 0 0 0 4px var(--amber-soft); }
+/* holding: framed correctly, still counting down to ready. Pulsing green
+   reads as "nearly there" where a static amber reads as "still wrong". */
+.video-status[data-state="holding"] .video-status-dot {
+  background: var(--green); box-shadow: 0 0 0 4px var(--green-soft);
+  animation: framePulse 0.9s ease-in-out infinite;
+}
+@keyframes framePulse { 50% { opacity: 0.35; } }
+
+.frame-go {
+  width: 100%; transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+.frame-go[disabled] {
+  background: transparent; color: var(--ink-2);
+  border: 1px dashed var(--line); cursor: default;
+}
+.frame-go[data-ready="true"] {
+  background: var(--green, #7fc98f); color: #14210f; border: 0; font-weight: 600;
+}
+@media (prefers-reduced-motion: reduce) {
+  .video-status[data-state="holding"] .video-status-dot { animation: none; }
+}
 
 /* employee wellness library */
 .library-hero {

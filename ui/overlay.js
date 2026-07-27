@@ -72,3 +72,58 @@ export function drawSkeleton(canvas, keypoints, accent = "#6d5b9e") {
 
   ctx.globalAlpha = 1;
 }
+
+/** The guided frame: the outline the user positions themselves into.
+ *
+ * Drawn beneath the skeleton so it reads as a target, not as tracking. Its
+ * shape encodes what the current move actually needs — a torso box for seated
+ * work, a taller full-body box when the form rules depend on seeing ankles.
+ * `state` is the server's frame check, so the outline, the ready indicator
+ * and the spoken cue can never disagree.
+ */
+export function drawFrameGuide(canvas, state) {
+  if (!state || !canvas) return;
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width;
+  const H = canvas.height;
+
+  // Full body wants nearly the whole height; torso sits in the upper-middle.
+  const box =
+    state.target === "full_body"
+      ? { x: W * 0.24, y: H * 0.05, w: W * 0.52, h: H * 0.9 }
+      : { x: W * 0.2, y: H * 0.08, w: W * 0.6, h: H * 0.66 };
+
+  const ok = !!state.ok;
+  const ready = !!state.ready;
+  const colour = ready ? "#7fc98f" : ok ? "#e2c66b" : "#e08a7a";
+
+  ctx.save();
+  ctx.setLineDash(ready ? [] : [10, 8]);
+  ctx.lineWidth = ready ? 4 : 3;
+  ctx.strokeStyle = colour;
+  ctx.globalAlpha = ready ? 0.95 : 0.75;
+
+  const r = 18;
+  ctx.beginPath();
+  ctx.moveTo(box.x + r, box.y);
+  ctx.arcTo(box.x + box.w, box.y, box.x + box.w, box.y + box.h, r);
+  ctx.arcTo(box.x + box.w, box.y + box.h, box.x, box.y + box.h, r);
+  ctx.arcTo(box.x, box.y + box.h, box.x, box.y, r);
+  ctx.arcTo(box.x, box.y, box.x + box.w, box.y, r);
+  ctx.closePath();
+  ctx.stroke();
+
+  // While holding position, fill the outline clockwise so the wait is legible
+  // rather than a frozen box the user assumes has hung.
+  if (ok && !ready && state.held_s > 0) {
+    const pct = Math.min(state.held_s / 1.2, 1);
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 0.9;
+    ctx.lineWidth = 5;
+    ctx.strokeStyle = "#7fc98f";
+    ctx.beginPath();
+    ctx.arc(W / 2, box.y + box.h + 22, 14, -Math.PI / 2, -Math.PI / 2 + pct * Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.restore();
+}

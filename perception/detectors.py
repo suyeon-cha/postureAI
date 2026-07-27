@@ -76,6 +76,37 @@ def framing(kp: Keypoints | None) -> str:
     return "no_person"
 
 
+#: How much of the body a move needs in frame. Seated work only needs the
+#: torso; anything loaded through the legs needs ankles, because the form
+#: rules that keep it safe (valgus, depth, knee travel) read knee and ankle
+#: landmarks and silently degrade to nothing without them.
+FRAME_TARGETS = {"torso": ("torso_only", "full_body"), "full_body": ("full_body",)}
+
+
+def frame_target(spec: dict[str, Any]) -> str:
+    return "full_body" if spec.get("requires_full_body") else "torso"
+
+
+def frame_check(kp: Keypoints | None, target: str) -> dict[str, Any]:
+    """Is the user standing where this move needs them to be?
+
+    Returns the guide the UI draws plus a plain-language reason, so the same
+    computation drives the on-screen outline, the ready indicator, and the
+    spoken cue — they can't disagree with each other.
+    """
+    seen = framing(kp)
+    ok = seen in FRAME_TARGETS.get(target, FRAME_TARGETS["torso"])
+    if seen == "no_person":
+        reason = "Step into view — I can't see you yet."
+    elif ok:
+        reason = "You're in frame."
+    elif target == "full_body":
+        reason = "Step back until I can see your feet."
+    else:
+        reason = "Move so your head and shoulders are in frame."
+    return {"target": target, "seen": seen, "ok": ok, "reason": reason}
+
+
 def forward_head_ratio(kp: Keypoints) -> float | None:
     """How far the ear sits ahead of the shoulder, normalized by shoulder width.
 

@@ -7,7 +7,7 @@
  */
 
 import { MockBackend } from "./mock.js";
-import { SKELETON_EDGES, drawSkeleton } from "./overlay.js";
+import { SKELETON_EDGES, drawSkeleton, drawFrameGuide } from "./overlay.js";
 import * as charts from "./charts.js";
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -262,9 +262,15 @@ function handle(msg) {
       break;
 
     case "state":
+      // Each move can need a different amount of you in frame, so the
+      // position gate reopens whenever the routine advances.
+      if (msg.session && msg.session.move_index !== S.live?.move_index) {
+        S.frameConfirmed = false;
+      }
       S.live = msg.session;
       S.keypoints = msg.keypoints || [];
       S.framing = msg.framing;
+      S.frame = msg.frame || null;
       if (S.screen === "session") paintSession();
       break;
 
@@ -1161,6 +1167,9 @@ function viewSession() {
             ? esc(S.cameraError)
             : "Camera permission is controlled by your browser. If a downloaded file blocks access, open the preview from localhost or use the GB10-served app."}
         </p>
+        <button class="btn frame-go" id="frameGo" disabled hidden>
+          Get into position
+        </button>
         <div class="row small muted" id="metrics"></div>
         <div class="ask-row">
           <span class="small muted">Ask mid-session:</span>
@@ -1192,6 +1201,14 @@ function viewSession() {
   $("#skip", wrap).addEventListener("click", () => send({ type: "skip" }));
   $("#stop", wrap).addEventListener("click", () => finishSession(false));
   $("#camToggle", wrap).addEventListener("click", toggleCamera);
+  // Confirming position restarts the move's tracker, so reps are counted from
+  // where the user actually began — not from the seconds they spent walking
+  // into frame, which otherwise show up as a phantom rep and a "too fast" cue.
+  $("#frameGo", wrap).addEventListener("click", (e) => {
+    send({ type: "restart_move" });
+    S.frameConfirmed = true;
+    e.currentTarget.hidden = true;
+  });
   paintVideoStatus();
   return wrap;
 }
@@ -1271,8 +1288,30 @@ function paintSession() {
       : `<span class="pill">Guidance: text and voice</span>`;
   }
 
+  paintFrameGo();
   drawOverlay();
   paintVideoStatus();
+}
+
+/** The position gate: disabled until the server says framing has held. */
+function paintFrameGo() {
+  const btn = $("#frameGo");
+  if (!btn) return;
+  const f = S.frame;
+  if (!S.cameraOn || S.frameConfirmed || !f) {
+    btn.hidden = true;
+    return;
+  }
+  btn.hidden = false;
+  btn.disabled = !f.ready;
+  btn.dataset.ready = String(!!f.ready);
+  btn.textContent = f.ready
+    ? "I'm in position — start counting"
+    : f.ok
+      ? "Hold it there…"
+      : f.target === "full_body"
+        ? "Step back so your feet are in frame"
+        : "Get your head and shoulders in frame";
 }
 
 function paintVideoStatus() {
@@ -1296,12 +1335,29 @@ function paintVideoStatus() {
       <span>${esc(S.videoStatus.text)}</span></div>`;
     return;
   }
-  const ready = S.framing !== "no_person" &&
-    (!S.plan?.needs_full_body || S.framing === "full_body");
-  box.dataset.state = ready ? "ready" : "scanning";
+  // Server-computed and per-move, not per-plan: a routine can mix a seated
+  // twist with a standing squat, and each needs a different amount of you in
+  // frame. Same object drives the on-canvas guide, so they cannot disagree.
+  const f = S.frame;
+  if (!f) {
+    box.dataset.state = "scanning";
+    box.innerHTML = `<span class="video-status-dot"></span><div>
+      <strong>Video AI is finding your position</strong>
+      <span>Keep the relevant body area in frame.</span></div>`;
+    return;
+  }
+  const want = f.target === "full_body" ? "Full body in frame" : "Head and shoulders in frame";
+  box.dataset.state = f.ready ? "ready" : f.ok ? "holding" : "scanning";
+  const heading = f.ready
+    ? "You're in position"
+    : f.ok
+      ? "Hold it there…"
+      : want;
+  const detail = f.ready
+    ? "Movement stays on the GB10 and frames are discarded."
+    : esc(f.reason || "Keep the relevant body area in frame.");
   box.innerHTML = `<span class="video-status-dot"></span><div>
-    <strong>${ready ? "Video AI is ready" : "Video AI is finding your position"}</strong>
-    <span>${ready ? "Movement stays on the GB10 and frames are discarded." : "Keep the relevant body area in frame."}</span></div>`;
+    <strong>${heading}</strong><span>${detail}</span></div>`;
 }
 
 function paintCue() {
@@ -1324,6 +1380,8 @@ function drawOverlay() {
     return;
   }
   drawSkeleton(canvas, S.keypoints, getComputedStyle(document.body).getPropertyValue("--accent").trim());
+  // Guide last so the target outline stays readable over the skeleton.
+  drawFrameGuide(canvas, S.frame);
 }
 
 async function startCamera() {
