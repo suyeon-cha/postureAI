@@ -501,6 +501,152 @@ textarea::placeholder { color: var(--ink-3); }
   margin-top: 6px; text-transform: lowercase;
 }
 
+.movement-guide-card {
+  display: grid; gap: 14px; padding: 18px;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line));
+  border-radius: var(--radius);
+  background: linear-gradient(145deg, var(--surface), var(--accent-soft));
+}
+.movement-guide-head {
+  display: flex; justify-content: space-between; align-items: flex-start; gap: 16px;
+}
+.movement-guide-head h2 { margin-top: 2px; font-size: 1.05rem; }
+.movement-guide-stage {
+  min-height: 250px; display: grid; place-items: center;
+  overflow: hidden; border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--line));
+  border-radius: 12px; background: color-mix(in srgb, var(--surface) 78%, transparent);
+}
+.movement-figure {
+  width: min(100%, 360px); color: var(--accent);
+  filter: drop-shadow(0 10px 18px color-mix(in srgb, var(--accent) 12%, transparent));
+}
+.movement-figure svg { width: 100%; height: auto; display: block; overflow: visible; }
+.movement-figure path,
+.movement-figure circle,
+.movement-figure ellipse {
+  vector-effect: non-scaling-stroke;
+  transform-box: fill-box;
+}
+.guide-body path, .guide-head, .guide-eye-line, .guide-palms path,
+.guide-chair, .guide-eight {
+  fill: none; stroke: currentColor; stroke-width: 5; stroke-linecap: round; stroke-linejoin: round;
+}
+.guide-joint { fill: currentColor; stroke: none; }
+.guide-breath { fill: var(--accent-soft); stroke: currentColor; stroke-width: 2; opacity: 0.18; }
+.guide-chair { color: var(--ink-3); stroke-width: 3; opacity: 0.52; }
+.guide-floor { fill: none; stroke: var(--line-strong); stroke-width: 3; stroke-linecap: round; }
+.guide-direction {
+  fill: none; stroke: var(--green); stroke-width: 3; stroke-linecap: round;
+  stroke-dasharray: 6 8; opacity: 0.72;
+}
+.guide-eye-line { fill: var(--accent-soft); }
+.guide-pupil { fill: currentColor; stroke: none; }
+.guide-eight { stroke: var(--green); stroke-width: 3; stroke-dasharray: 9 8; opacity: 0.78; }
+.movement-guide-copy {
+  display: grid; grid-template-columns: 54px minmax(0, 1fr);
+  gap: 6px 12px; padding-top: 2px;
+}
+.movement-guide-copy span {
+  color: var(--accent-ink); font-size: 0.7rem; font-weight: 650;
+  text-transform: uppercase; letter-spacing: 0.06em;
+}
+.movement-guide-copy p { color: var(--ink-2); font-size: 0.84rem; line-height: 1.45; }
+
+/* Move-specific motion. The guide changes pose and animation with every
+   approved routine; it does not claim to be a camera-derived evaluation. */
+.movement-figure .guide-head,
+.movement-figure .guide-upper,
+.movement-figure .guide-lower,
+.movement-figure .guide-arm,
+.movement-figure .guide-leg,
+.movement-figure .guide-shoulder-left,
+.movement-figure .guide-shoulder-right,
+.movement-figure .guide-hip-left,
+.movement-figure .guide-hip-right,
+.movement-figure .guide-breath,
+.movement-figure .guide-pupil,
+.movement-figure .guide-palms {
+  transform-origin: center;
+}
+
+.motion-neck-tilt .guide-head { transform-origin: 50% 100%; animation: guide-neck-tilt 2.6s ease-in-out infinite; }
+.motion-trap-stretch .guide-head { transform-origin: 50% 100%; animation: guide-trap-head 3s ease-in-out infinite; }
+.motion-trap-stretch .guide-arm-right { transform-origin: 50% 0%; animation: guide-arm-anchor 3s ease-in-out infinite; }
+.motion-shoulder-roll .guide-shoulder-left,
+.motion-shoulder-roll .guide-shoulder-right { animation: guide-shoulder-dot 2s ease-in-out infinite; }
+.motion-shoulder-roll .guide-arm-left,
+.motion-shoulder-roll .guide-arm-right { animation: guide-shoulder-arm 2s ease-in-out infinite; }
+.motion-chest-open .guide-arm-left { transform-origin: 100% 0%; animation: guide-open-left 2.7s ease-in-out infinite; }
+.motion-chest-open .guide-arm-right { transform-origin: 0% 0%; animation: guide-open-right 2.7s ease-in-out infinite; }
+.motion-chest-open .guide-shoulders { animation: guide-chest 2.7s ease-in-out infinite; }
+.motion-chin-tuck .guide-head { animation: guide-chin 2.2s ease-in-out infinite; }
+.motion-seated-twist .guide-upper { transform-origin: 50% 92%; animation: guide-twist 2.8s ease-in-out infinite; }
+.motion-cat-cow .guide-upper { transform-origin: 50% 100%; animation: guide-cat-cow 3s ease-in-out infinite; }
+.motion-lunge .guide-body { animation: guide-lunge-drop 2.8s ease-in-out infinite; }
+.motion-lunge .guide-leg-left { transform-origin: 50% 0%; transform: rotate(18deg) translateX(-6px); }
+.motion-lunge .guide-leg-right { transform-origin: 50% 0%; transform: rotate(-31deg) translateX(7px); }
+.motion-forward-fold .guide-upper { transform-origin: 50% 100%; animation: guide-fold 3.2s ease-in-out infinite; }
+.motion-wrist-stretch .guide-arm-right { transform-origin: 0% 0%; animation: guide-wrist 2.4s ease-in-out infinite; }
+.motion-prayer .guide-arm-left { transform-origin: 100% 0%; animation: guide-prayer-left 2.4s ease-in-out infinite; }
+.motion-prayer .guide-arm-right { transform-origin: 0% 0%; animation: guide-prayer-right 2.4s ease-in-out infinite; }
+.motion-finger-fan .guide-arm-left,
+.motion-finger-fan .guide-arm-right { animation: guide-finger-fan 1.5s ease-in-out infinite; }
+.motion-distance-gaze .guide-pupil { animation: guide-distance-gaze 3.2s ease-in-out infinite; }
+.motion-eye-eight .guide-pupil { offset-path: path("M84 104 C84 68 132 68 140 104 C148 140 196 140 196 104 C196 68 148 68 140 104 C132 140 84 140 84 104"); animation: guide-eye-eight 4s linear infinite; }
+.motion-palming .guide-palms { animation: guide-palming 2.7s ease-in-out infinite; }
+.motion-breathing .guide-breath { animation: guide-breathe 4s ease-in-out infinite; }
+.motion-glute-squeeze .guide-hip-left,
+.motion-glute-squeeze .guide-hip-right { animation: guide-glute 2s ease-in-out infinite; }
+.motion-figure-four .guide-leg-right { transform-origin: 50% 0%; animation: guide-figure-four 2.8s ease-in-out infinite; }
+.motion-squat .guide-body { animation: guide-squat 2.8s ease-in-out infinite; }
+.motion-squat .guide-leg-left { transform-origin: 50% 0%; animation: guide-squat-left 2.8s ease-in-out infinite; }
+.motion-squat .guide-leg-right { transform-origin: 50% 0%; animation: guide-squat-right 2.8s ease-in-out infinite; }
+.motion-hip-hinge .guide-upper { transform-origin: 50% 100%; animation: guide-hinge 2.8s ease-in-out infinite; }
+
+@keyframes guide-neck-tilt { 0%, 15% { transform: rotate(0); } 45%, 75% { transform: rotate(18deg); } 100% { transform: rotate(0); } }
+@keyframes guide-trap-head { 0%, 15% { transform: rotate(0); } 45%, 75% { transform: rotate(-18deg); } 100% { transform: rotate(0); } }
+@keyframes guide-arm-anchor { 0%, 15%, 100% { transform: translateY(0); } 45%, 75% { transform: translateY(10px); } }
+@keyframes guide-shoulder-dot { 0%, 100% { transform: translateY(0); } 30% { transform: translateY(-12px); } 65% { transform: translate(5px, 4px); } }
+@keyframes guide-shoulder-arm { 0%, 100% { transform: translateY(0); } 30% { transform: translateY(-8px); } 65% { transform: translateY(5px); } }
+@keyframes guide-open-left { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(25deg) translateX(-7px); } }
+@keyframes guide-open-right { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(-25deg) translateX(7px); } }
+@keyframes guide-chest { 0%, 100% { transform: scaleX(1); } 50% { transform: scaleX(1.18); } }
+@keyframes guide-chin { 0%, 100% { transform: translateX(7px); } 50% { transform: translateX(-7px); } }
+@keyframes guide-twist { 0%, 100% { transform: skewX(0) scaleX(1); } 50% { transform: skewX(-11deg) scaleX(.82); } }
+@keyframes guide-cat-cow { 0%, 100% { transform: skewX(0) scaleY(1); } 50% { transform: skewX(8deg) scaleY(.88) translateY(9px); } }
+@keyframes guide-lunge-drop { 0%, 100% { transform: translateY(-5px); } 50% { transform: translateY(16px); } }
+@keyframes guide-fold { 0%, 15%, 100% { transform: rotate(0); } 55%, 75% { transform: rotate(58deg); } }
+@keyframes guide-wrist { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(-48deg) translate(9px, -9px); } }
+@keyframes guide-prayer-left { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(-35deg) translate(14px, -8px); } }
+@keyframes guide-prayer-right { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(35deg) translate(-14px, -8px); } }
+@keyframes guide-finger-fan { 0%, 100% { stroke-width: 5; } 50% { stroke-width: 9; transform: scaleX(1.05); } }
+@keyframes guide-distance-gaze { 0%, 20% { transform: translateX(-48px); } 65%, 100% { transform: translateX(58px); } }
+@keyframes guide-eye-eight { to { offset-distance: 100%; } }
+@keyframes guide-palming { 0%, 100% { transform: translateY(18px) scale(.9); opacity: .58; } 45%, 75% { transform: translateY(-8px) scale(1); opacity: 1; } }
+@keyframes guide-breathe { 0%, 100% { transform: scale(.82); opacity: .15; } 50% { transform: scale(1.28); opacity: .42; } }
+@keyframes guide-glute { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.65); } }
+@keyframes guide-figure-four { 0%, 100% { transform: rotate(0); } 50%, 75% { transform: rotate(73deg) translate(20px, -12px); } }
+@keyframes guide-squat { 0%, 100% { transform: translateY(-4px); } 50% { transform: translateY(28px); } }
+@keyframes guide-squat-left { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(22deg); } }
+@keyframes guide-squat-right { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(-22deg); } }
+@keyframes guide-hinge { 0%, 100% { transform: rotate(0); } 50%, 72% { transform: rotate(38deg); } }
+
+.camera-toolbar {
+  display: flex; justify-content: space-between; align-items: center; gap: 16px;
+  padding: 12px 14px; background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+.camera-toolbar > div { display: grid; gap: 1px; }
+.camera-toolbar strong { font-size: 0.86rem; }
+.camera-toolbar span { color: var(--ink-2); font-size: 0.77rem; }
+.camera-toolbar .btn { padding: 8px 13px; font-size: 0.82rem; white-space: nowrap; }
+.camera-help { margin-top: -10px; }
+.camera-help-error {
+  color: var(--rose); padding: 9px 11px; margin-top: -8px;
+  border-radius: 8px; border: 1px solid color-mix(in srgb, var(--rose) 30%, var(--line));
+  background: var(--rose-soft);
+}
+
 .cue-banner {
   background: var(--accent-soft); color: var(--accent-ink);
   border-radius: var(--radius-sm); padding: 14px 18px; font-weight: 520;
@@ -581,6 +727,16 @@ textarea::placeholder { color: var(--ink-3); }
 .steps span { height: 4px; flex: 1; border-radius: 2px; background: var(--line); }
 .steps span[data-done="true"] { background: var(--green); }
 .steps span[data-active="true"] { background: var(--accent); }
+
+@media (max-width: 540px) {
+  .movement-guide-head, .camera-toolbar { align-items: stretch; flex-direction: column; }
+  .movement-guide-head .pill { width: fit-content; }
+  .camera-toolbar .btn { width: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .movement-figure * { animation: none !important; }
+}
 
 /* dashboards */
 

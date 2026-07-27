@@ -40,6 +40,82 @@ const STYLES = [
   { key: "energetic", label: "Energetic", hint: "Brisk and upbeat" },
 ];
 
+/* The movement guide is deliberately deterministic, not generated advice.
+   Each approved routine maps to an animation that shows the relevant direction
+   of travel. The authored setup/during cues still come from /api/routines. */
+const MOVE_MOTIONS = {
+  neck_side_stretch: "neck-tilt",
+  shoulder_rolls: "shoulder-roll",
+  trap_stretch: "trap-stretch",
+  chest_opener: "chest-open",
+  chin_tuck: "chin-tuck",
+  seated_twist: "seated-twist",
+  cat_cow: "cat-cow",
+  hip_flexor_reset: "lunge",
+  standing_forward_fold: "forward-fold",
+  wrist_stretch: "wrist-stretch",
+  wrist_prayer: "prayer",
+  finger_fan: "finger-fan",
+  eye_horizon: "distance-gaze",
+  eye_palming: "palming",
+  eye_figure_eight: "eye-eight",
+  box_breath: "breathing",
+  glute_squeeze: "glute-squeeze",
+  figure_four: "figure-four",
+  chair_squat: "squat",
+  hip_hinge: "hip-hinge",
+  lunge: "lunge",
+};
+
+function movementGuideMarkup(move) {
+  const motion = MOVE_MOTIONS[move] || "breathing";
+  const body = `
+    <g class="guide-body">
+      <circle class="guide-head" cx="140" cy="38" r="21"/>
+      <g class="guide-upper">
+        <path class="guide-torso" d="M140 60 L140 130"/>
+        <path class="guide-shoulders" d="M103 76 L140 66 L177 76"/>
+        <path class="guide-arm guide-arm-left" d="M103 76 L91 113 L84 149"/>
+        <path class="guide-arm guide-arm-right" d="M177 76 L189 113 L196 149"/>
+      </g>
+      <g class="guide-lower">
+        <path class="guide-hips" d="M116 130 L164 130"/>
+        <path class="guide-leg guide-leg-left" d="M121 130 L112 169 L104 207"/>
+        <path class="guide-leg guide-leg-right" d="M159 130 L168 169 L176 207"/>
+      </g>
+      <ellipse class="guide-breath" cx="140" cy="96" rx="24" ry="30"/>
+      <circle class="guide-joint guide-shoulder-left" cx="103" cy="76" r="5"/>
+      <circle class="guide-joint guide-shoulder-right" cx="177" cy="76" r="5"/>
+      <circle class="guide-joint guide-hip-left" cx="121" cy="130" r="5"/>
+      <circle class="guide-joint guide-hip-right" cx="159" cy="130" r="5"/>
+    </g>`;
+
+  const eyes = motion === "eye-eight" || motion === "distance-gaze"
+    ? `<g class="guide-eye-demo">
+        <path class="guide-eye-line" d="M48 104 Q140 34 232 104 Q140 174 48 104Z"/>
+        <circle class="guide-pupil" cx="105" cy="104" r="10"/>
+        ${motion === "eye-eight" ? `<path class="guide-eight" d="M84 104 C84 68 132 68 140 104 C148 140 196 140 196 104 C196 68 148 68 140 104 C132 140 84 140 84 104"/>` : ""}
+      </g>`
+    : "";
+
+  const hands = motion === "palming"
+    ? `<g class="guide-palms"><path d="M91 91 Q112 68 132 78 L132 136 Q108 143 91 119Z"/>
+        <path d="M189 91 Q168 68 148 78 L148 136 Q172 143 189 119Z"/></g>`
+    : "";
+
+  const chair = ["seated-twist", "cat-cow", "glute-squeeze", "figure-four"].includes(motion)
+    ? `<path class="guide-chair" d="M88 128 H192 M94 128 V206 M186 128 V206"/>`
+    : "";
+
+  return `<div class="movement-figure motion-${motion}" data-motion="${motion}">
+    <svg viewBox="0 0 280 224" aria-hidden="true">
+      ${eyes || `${chair}${body}${hands}`}
+      <path class="guide-floor" d="M54 210 H226"/>
+      <path class="guide-direction" d="M118 22 Q140 9 162 22"/>
+    </svg>
+  </div>`;
+}
+
 /* Preview mode can be requested deliberately — `?preview` in the URL, or the
    flag set by scripts/build-preview.py in the single-file bundle — instead of
    being inferred from a failed socket. Useful for sharing screens and for
@@ -83,10 +159,12 @@ const S = {
   keypoints: [],
   framing: "no_person",
   cameraOn: false,
+  cameraError: null,
   planning: false,
   dashboard: null,
   workspace: null,
   knowledge: null,
+  routines: null,
   trace: [],
   completed: false,
   response: null,
@@ -145,16 +223,18 @@ async function boot() {
       renderBadge();
       showToast("Connection to the local AI was lost. Your camera is no longer sending frames.", "error");
     });
-    const [health, prefs, dash, knowledge] = await Promise.all([
+    const [health, prefs, dash, knowledge, routines] = await Promise.all([
       fetch("/api/health").then((r) => r.json()).catch(() => null),
       fetch("/api/prefs").then((r) => r.json()).catch(() => null),
       fetch("/api/dashboard").then((r) => r.json()).catch(() => null),
       fetch("/api/knowledge").then((r) => r.json()).catch(() => null),
+      fetch("/api/routines").then((r) => r.json()).catch(() => null),
     ]);
     if (health) S.health = health;
     if (prefs) S.prefs = { ...S.prefs, ...prefs };
     if (dash) S.dashboard = dash;
     if (knowledge) S.knowledge = knowledge;
+    if (routines) S.routines = routines;
   } else {
     socket = null;
     S.preview = true;
@@ -163,6 +243,7 @@ async function boot() {
     S.dashboard = mock.dashboard();
     S.workspace = mock.workspace();
     S.knowledge = mock.knowledge();
+    S.routines = mock.routines();
   }
 
   S.intake.duration_min = S.prefs.preferred_duration_min;
@@ -919,7 +1000,7 @@ function restorePlanControls() {
 function viewPlan() {
   const p = S.plan;
   const kb = p.knowledge || S.knowledge?.topics?.find((t) => t.area === p.symptom);
-  const lib = mock ? mock.routines().moves : null;
+  const lib = S.routines?.moves || null;
   const name = (k) => lib?.[k]?.name || k.replace(/_/g, " ");
   const secs = (k) => lib?.[k]?.seconds || null;
 
@@ -1027,6 +1108,35 @@ function viewSession() {
       </div>
 
       <div class="stack">
+        <div class="camera-toolbar">
+          <div>
+            <strong>Your camera</strong>
+            <span id="cameraState">${S.cameraOn ? "On for this session" : "Off — movement guide stays available"}</span>
+          </div>
+          <button class="btn secondary" id="camToggle" aria-pressed="${S.cameraOn}">
+            ${S.cameraOn ? "Turn camera off" : "Turn on my camera"}
+          </button>
+        </div>
+
+        <section class="movement-guide-card" aria-labelledby="guideTitle">
+          <div class="movement-guide-head">
+            <div>
+              <span class="eyebrow">Movement guide</span>
+              <h2 id="guideTitle">Follow the example</h2>
+            </div>
+            <span class="pill info" id="guideMove">Getting ready…</span>
+          </div>
+          <div id="movementGuide" class="movement-guide-stage">
+            ${movementGuideMarkup(null)}
+          </div>
+          <div class="movement-guide-copy">
+            <span>Set up</span>
+            <p id="guideSetup">Get into a comfortable starting position.</p>
+            <span>Move</span>
+            <p id="guideDuring">Move slowly and stay within a comfortable range.</p>
+          </div>
+        </section>
+
         <div class="video-status" id="videoStatus" data-state="${S.cameraOn ? "scanning" : "off"}">
           <span class="video-status-dot"></span>
           <div><strong>${S.cameraOn ? "Video AI is finding your position" : "Video AI is off"}</strong>
@@ -1038,14 +1148,19 @@ function viewSession() {
           <canvas id="overlay"></canvas>
           <div class="cam-off" id="camOff" ${S.cameraOn ? "hidden" : ""}>
             <strong>Camera is off</strong>
-            <p class="small muted">Text and voice guidance only. You can turn the camera
-              on at any time — or leave it off entirely.</p>
-            <button class="btn secondary" id="camOn">Turn on camera guidance</button>
+            <p class="small muted">Use the animated movement guide above with text and
+              voice, or turn the camera on when you want form feedback.</p>
           </div>
           <div class="cam-flag" id="camFlag" ${S.cameraOn ? "" : "hidden"}>
-            ${S.preview ? "Preview skeleton · synthetic" : "Pose on GB10 · not recorded"}
+            ${S.preview ? "Live camera preview · AI check simulated" : "Pose on GB10 · not recorded"}
           </div>
         </div>
+        <p class="camera-help tiny ${S.cameraError ? "camera-help-error" : "muted"}"
+          id="cameraHelp" ${S.preview || S.cameraError ? "" : "hidden"}>
+          ${S.cameraError
+            ? esc(S.cameraError)
+            : "Camera permission is controlled by your browser. If a downloaded file blocks access, open the preview from localhost or use the GB10-served app."}
+        </p>
         <div class="row small muted" id="metrics"></div>
         <div class="ask-row">
           <span class="small muted">Ask mid-session:</span>
@@ -1076,19 +1191,7 @@ function viewSession() {
   });
   $("#skip", wrap).addEventListener("click", () => send({ type: "skip" }));
   $("#stop", wrap).addEventListener("click", () => finishSession(false));
-  $("#camOn", wrap).addEventListener("click", async () => {
-    const ok = await startCamera();
-    S.cameraOn = ok;
-    send({ type: "camera", on: ok });
-    $("#camOff", wrap).hidden = ok;
-    $("#camFlag", wrap).hidden = !ok;
-    if (!ok) {
-      $("#camOff", wrap).innerHTML =
-        `<strong>No camera access</strong><p class="small muted">That's completely fine —
-         the routine works with text and voice guidance. Nothing else changes.</p>`;
-      $("#camOff", wrap).hidden = false;
-    }
-  });
+  $("#camToggle", wrap).addEventListener("click", toggleCamera);
   paintVideoStatus();
   return wrap;
 }
@@ -1098,7 +1201,7 @@ function paintSession() {
   const p = S.plan;
   if (!live || !p) return;
 
-  const lib = mock ? mock.routines().moves : null;
+  const lib = S.routines?.moves || null;
   const total = lib?.[live.move]?.seconds || 45;
   const elapsed = live.hold_seconds || 0;
   const remain = Math.max(0, Math.ceil(total - elapsed));
@@ -1113,9 +1216,31 @@ function paintSession() {
   }
 
   const nameEl = $("#moveName");
-  if (nameEl) nameEl.textContent = lib?.[live.move]?.name || String(live.move || "").replace(/_/g, " ");
+  const moveName =
+    lib?.[live.move]?.name ||
+    p.move_names?.[live.move_index] ||
+    String(live.move || "").replace(/_/g, " ");
+  if (nameEl) nameEl.textContent = moveName;
   const cueEl = $("#moveCue");
   if (cueEl) cueEl.textContent = lib?.[live.move]?.cues?.during || "";
+
+  const guide = $("#movementGuide");
+  if (guide && guide.dataset.move !== live.move) {
+    guide.dataset.move = live.move;
+    guide.innerHTML = movementGuideMarkup(live.move);
+  }
+  const guideMove = $("#guideMove");
+  if (guideMove) guideMove.textContent = moveName;
+  const guideSetup = $("#guideSetup");
+  if (guideSetup) {
+    guideSetup.textContent =
+      lib?.[live.move]?.cues?.setup || `Get ready for ${moveName.toLowerCase()}.`;
+  }
+  const guideDuring = $("#guideDuring");
+  if (guideDuring) {
+    guideDuring.textContent =
+      lib?.[live.move]?.cues?.during || S.cue || "Move slowly and stay within a comfortable range.";
+  }
 
   // Naming the muscle while it works is the mind-muscle mechanism, so this
   // stays on screen for the whole move rather than flashing with the cue.
@@ -1159,6 +1284,12 @@ function paintVideoStatus() {
       <span>Timer and voice guidance remain available.</span></div>`;
     return;
   }
+  if (S.preview && videoStream) {
+    box.dataset.state = "ready";
+    box.innerHTML = `<span class="video-status-dot"></span><div><strong>Camera preview is on</strong>
+      <span>Your live feed is visible. Form evaluation is simulated until the GB10 is attached.</span></div>`;
+    return;
+  }
   if (S.videoStatus) {
     box.dataset.state = S.videoStatus.status;
     box.innerHTML = `<span class="video-status-dot"></span><div><strong>Local video AI check</strong>
@@ -1186,20 +1317,61 @@ function drawOverlay() {
     canvas.width = wrap.clientWidth;
     canvas.height = wrap.clientHeight;
   }
+  // In the standalone preview, never imply that synthetic landmarks came from
+  // the person's real camera. The animated guide is shown in its own panel.
+  if (S.preview && videoStream) {
+    canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
+    return;
+  }
   drawSkeleton(canvas, S.keypoints, getComputedStyle(document.body).getPropertyValue("--accent").trim());
 }
 
 async function startCamera() {
   try {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      throw new Error("Camera access is unavailable in this browser context.");
+    }
     videoStream = await navigator.mediaDevices.getUserMedia({
       video: { width: 640, height: 480, facingMode: "user" },
       audio: false,
     });
   } catch {
+    S.cameraError =
+      "Camera could not start. Allow camera permission in the browser, then try again. " +
+      "If you opened a downloaded file, use localhost or the GB10-served app.";
     return false;
   }
+  S.cameraError = null;
   attachStream();
   return true;
+}
+
+async function toggleCamera() {
+  if (S.cameraOn) {
+    stopCamera();
+    send({ type: "camera", on: false });
+    render();
+    showToast("Camera turned off. The movement guide and voice coaching continue.");
+    return;
+  }
+
+  const ok = await startCamera();
+  S.cameraOn = ok;
+  send({ type: "camera", on: ok });
+  if (ok) {
+    render();
+    attachStream();
+    showToast(S.preview
+      ? "Camera preview is on. AI form evaluation remains simulated without the GB10."
+      : "Camera guidance is on. Frames are processed locally and are not stored.");
+    return;
+  }
+
+  render();
+  showToast(
+    "Camera access was not available. Allow camera permission, or open this preview from localhost. The movement guide still works.",
+    "error"
+  );
 }
 
 /** Bind the live stream to whatever <video id="cam"> currently exists.
@@ -1247,6 +1419,7 @@ function stopCamera() {
   if (videoStream) videoStream.getTracks().forEach((t) => t.stop());
   videoStream = null;
   S.cameraOn = false;
+  S.cameraError = null;
 }
 
 function finishSession(completed) {

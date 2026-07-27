@@ -95,13 +95,6 @@ const KNOWLEDGE = {
   },
 };
 
-const CUES = [
-  "Relax your shoulders as you roll back.",
-  "Slow it down — four seconds per circle.",
-  "Bigger circle — reach the top of the shrug.",
-  "Let that bottom shoulder soften down.",
-];
-
 function rng(seed) {
   let s = seed;
   return () => ((s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
@@ -322,8 +315,10 @@ export class MockBackend {
     const spec = MOVES[key];
 
     if (this.session.camera && Math.random() < 0.02 && this.session.moveElapsed > 5) {
-      this._emit({ type: "coach", text: CUES[this.cueIndex++ % CUES.length], speak: this.prefs.voice, routine: null });
-      this._trace({ kind: "tool", name: "generate_coaching_cue", arguments: { move: key }, result: { source: "pace" } });
+      const cue = this.cueIndex++ % 2 === 0 ? spec.cues.during : spec.cues.setup;
+      this._emit({ type: "coach", text: cue, speak: this.prefs.voice, routine: null });
+      this._trace({ kind: "tool", name: "generate_coaching_cue", arguments: { move: key },
+        result: { source: "approved_move_library", preview_simulated: true } });
     }
     if (this.session.camera && this.session.moveElapsed > 5 &&
         this.session.moveElapsed - this.session.lastVideoCheck > 8) {
@@ -332,7 +327,7 @@ export class MockBackend {
         type: "video_ai",
         status: "ready",
         move: key,
-        text: "Preview check: the relevant movement is visible. Continue slowly and comfortably.",
+        text: `Preview simulation for ${spec.name}: compare your movement with the animated guide. ${spec.cues.during}`,
       });
       this._trace({ kind: "tool", name: "look_at_frame", arguments: { move: key },
         result: { local_preview: true, visible: true } });
