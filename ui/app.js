@@ -2035,9 +2035,7 @@ function viewKnowledge() {
           <span class="pill">${areas.length} desk-work topics</span>
           <span class="pill info">Animated demos</span></div>
         <h1>Learn what helps during a desk day</h1>
-        <p class="hero-lede">Understand common desk-work discomfort, explore the movements
-          FlowReset can recommend, and review the same setup and form cues used by your
-          local coach.</p>
+        <p class="hero-lede">The movements FlowReset can recommend, and why each one helps.</p>
         <div class="row">
           <button class="btn" id="libraryReset">Start a reset</button>
           ${continueMove ? `<button class="btn secondary" data-demo-move="${esc(continueMove.key)}">
@@ -2057,8 +2055,6 @@ function viewKnowledge() {
         <span class="eyebrow">Use this library for</span>
         <strong>Education and general wellness</strong>
         <p class="small">${esc(kb.boundary)}</p>
-        <p class="tiny muted">The camera can observe broad movement signals; it cannot
-          diagnose pain, injury, posture disorders, or vision conditions.</p>
       </div>
     </div>
 
@@ -2068,7 +2064,6 @@ function viewKnowledge() {
           <span class="eyebrow">Explore by need</span>
           <h2 id="topicsTitle">Common desk-work concerns</h2>
         </div>
-        <p class="small muted">Choose a topic to see relevant exercise guides.</p>
       </div>
       <div class="grid library-grid">
         ${areas.map((area) => {
@@ -2104,8 +2099,7 @@ function viewKnowledge() {
         <div class="stack-sm">
           <span class="eyebrow">Approved movement catalog</span>
           <h2 id="exercisesTitle">Exercise guides</h2>
-          <p class="small muted">These are the only movements the agent can select. It cannot
-            invent a new exercise or replace the reviewed coaching language.</p>
+          <p class="small muted">The only movements the agent can select — it cannot invent one.</p>
         </div>
         <label class="library-search">
           <span class="tiny">Search exercises</span>
@@ -2145,18 +2139,11 @@ function viewKnowledge() {
                      ${hist.practiced}×</span>`
                 : `<span class="practice-badge new" title="You have not tried this yet">New</span>`}
             </div>
-            ${mus.primary?.length ? `<p class="exercise-muscles">
-              <span class="eyebrow">Works</span> ${esc(mus.primary.join(" · "))}</p>` : ""}
-            ${mus.feel ? `<p class="exercise-feel">You should feel ${esc(mus.feel)}.</p>` : ""}
-            <p class="exercise-targets">For: ${esc((move.targets || []).join(" · "))}</p>
-            <div class="exercise-instruction">
-              <span>Set up</span><p>${esc(move.cues?.setup || "Follow the coach's setup cue.")}</p>
-            </div>
-            <div class="exercise-instruction">
-              <span>Focus on</span><p>${esc(move.cues?.during || "Move slowly in a comfortable range.")}</p>
-            </div>
-            <button class="btn secondary exercise-demo-button" type="button"
-              data-demo-move="${esc(move.key)}">Watch motion demo</button>
+            ${mus.primary?.length
+              ? `<p class="exercise-muscles">${esc(mus.primary.join(" · "))}</p>`
+              : `<p class="exercise-muscles">${esc((move.targets || []).join(" · "))}</p>`}
+            <button class="btn subtle exercise-demo-button" type="button"
+              data-demo-move="${esc(move.key)}">How to do it</button>
           </article>`;
         }).join("")}
       </div>
@@ -2183,6 +2170,7 @@ function viewKnowledge() {
             <div class="exercise-instruction">
               <span>Focus on</span><p id="demoDuring"></p>
             </div>
+            <div class="exercise-instruction" id="demoFeel" hidden></div>
             <div class="notice small"><strong>Comfort first.</strong>
               This animation shows movement direction, not a clinical range target.
               Move slowly and stop if a movement causes or worsens pain.</div>
@@ -2285,6 +2273,18 @@ function viewKnowledge() {
         demoMove.cues?.setup || "Follow the coach's setup cue.";
       $("#demoDuring", wrap).textContent =
         demoMove.cues?.during || "Move slowly in a comfortable range.";
+      // The cards are scannable summaries now, so the anatomy detail they used
+      // to carry lives here — read once, when the user has chosen this move.
+      const demoFeel = $("#demoFeel", wrap);
+      if (demoFeel) {
+        const dm = demoMove.muscles || {};
+        demoFeel.hidden = !dm.feel;
+        if (dm.feel) {
+          demoFeel.innerHTML =
+            `<span>Where you should feel it</span><p>${esc(dm.feel)}.` +
+            (dm.not_feel ? ` <em>Not ${esc(dm.not_feel)}.</em>` : "") + `</p>`;
+        }
+      }
       $("#demoPause", wrap).textContent = "Pause animation";
       $("#demoPause", wrap).setAttribute("aria-pressed", "false");
       $("#demoStage", wrap).classList.remove("paused");

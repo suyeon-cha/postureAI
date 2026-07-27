@@ -1294,3 +1294,14 @@ tr[data-live="true"] td { background: var(--accent-soft); }
   --rose: #d99a89; --rose-soft: #31211e;
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 30px rgba(0, 0, 0, 0.3);
 }
+
+/* Learn cards are scannable summaries, not documents: name, state, a few
+   chips, the muscles worked, and a way in. Setup and form cues moved to the
+   demo dialog — the card's job is to help you choose, not to teach. */
+.exercise-guide-card { gap: 10px; }
+.exercise-muscles {
+  font-size: 0.83rem; color: var(--ink-2); margin: 0;
+  text-transform: lowercase;
+}
+.exercise-guide-card .exercise-demo-button { justify-self: start; padding: 8px 16px; }
+.exercise-library-grid { align-items: start; }

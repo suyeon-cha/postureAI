@@ -9,6 +9,37 @@
  * this be mistaken for the real thing.
  */
 
+// Muscle map, mirrored from agent/muscles.yaml so the preview shows the
+// same teaching layer the box does.
+const MUSCLES = {
+  neck_side_stretch: { primary: ["upper trapezius", "levator scapulae"], feel: "a long line down the side of your neck into the top of your shoulder" },
+  chin_tuck: { primary: ["deep neck flexors"], feel: "the back of your neck lengthening, and a small effort at the front of your throat" },
+  shoulder_rolls: { primary: ["trapezius", "rhomboids"], feel: "your shoulder blades sliding up, back, and down your ribcage" },
+  trap_stretch: { primary: ["upper trapezius"], feel: "a broad stretch from your ear down to the anchored shoulder" },
+  chest_opener: { primary: ["pectoralis major", "pectoralis minor"], feel: "a widening across the front of your chest and collarbones" },
+  y_raise: { primary: ["lower trapezius", "rhomboids"], feel: "the muscles between and just below your shoulder blades switching on" },
+  seated_twist: { primary: ["obliques", "spinal rotators"], feel: "a gentle wringing through your waist and mid-back" },
+  cat_cow: { primary: ["spinal erectors", "abdominals"], feel: "each vertebra moving in turn, from your tailbone to your neck" },
+  thoracic_extension: { primary: ["thoracic erectors"], feel: "your upper back opening backward over the chair edge" },
+  hip_flexor_reset: { primary: ["psoas", "iliacus"], feel: "a stretch across the front of the hip on your back leg" },
+  standing_forward_fold: { primary: ["hamstrings", "spinal erectors"], feel: "a long release down the back of your legs and spine" },
+  hip_circles: { primary: ["hip rotators", "glute medius"], feel: "the joint moving freely where your leg meets your pelvis" },
+  squat: { primary: ["quadriceps", "glutes"], feel: "your thighs and glutes taking the load as you sit back" },
+  calf_raise: { primary: ["gastrocnemius", "soleus"], feel: "your calves shortening at the top, lengthening slowly on the way down" },
+  glute_squeeze: { primary: ["gluteus maximus"], feel: "both glutes contracting evenly underneath you" },
+  figure_four: { primary: ["piriformis", "gluteus medius"], feel: "a deep stretch in the back of the crossed hip" },
+  chair_squat: { primary: ["glutes", "quadriceps"], feel: "your glutes driving you up out of the chair" },
+  hip_hinge: { primary: ["glutes", "hamstrings"], feel: "your hips travelling backward and your hamstrings taking tension" },
+  lunge: { primary: ["quadriceps", "glutes"], feel: "the front thigh and glute working, and the back hip stretching open" },
+  wrist_stretch: { primary: ["wrist flexors", "wrist extensors"], feel: "a stretch along the inside or outside of your forearm" },
+  wrist_prayer: { primary: ["wrist flexors"], feel: "an even stretch across both inner forearms" },
+  finger_fan: { primary: ["hand intrinsics", "finger extensors"], feel: "your fingers spreading fully, then closing fully" },
+  eye_horizon: { primary: ["ciliary muscle"], feel: "your eyes softening as they let go of near focus" },
+  eye_palming: { primary: ["extraocular muscles"], feel: "warmth and complete darkness letting your eyes rest" },
+  eye_figure_eight: { primary: ["extraocular muscles"], feel: "your eyes travelling smoothly to the edges of their range" },
+  box_breath: { primary: ["diaphragm"], feel: "your lower ribs widening on the way in, softening on the way out" },
+};
+
 const MOVES = {
   neck_side_stretch: { name: "Neck side stretch", seconds: 45, targets: ["neck"], cues: { setup: "Sit tall. Let your right ear drift toward your right shoulder.", during: "Breathe out and let the shoulder drop away from your ear." } },
   shoulder_rolls: { name: "Shoulder rolls", seconds: 40, targets: ["shoulders"], cues: { setup: "Arms heavy. Roll your shoulders up, back, and down.", during: "Make the circle bigger — all the way back." } },
@@ -37,6 +68,10 @@ const MOVES = {
   hip_hinge: { name: "Standing hip hinge", seconds: 45, targets: ["glutes"], cues: { setup: "Feet hip width, soft knees, hands on your hip creases.", during: "Push your hips back, chest stays long. Squeeze your glutes to stand." } },
   lunge: { name: "Split-stance lunge", seconds: 70, targets: ["glutes", "legs"], cues: { setup: "Step your right foot back about a stride. Both toes pointing forward.", during: "Drop straight down — front shin vertical, torso tall." } },
 };
+
+for (const [key, m] of Object.entries(MUSCLES)) {
+  if (MOVES[key]) MOVES[key].muscles = m;
+}
 
 const BY_SYMPTOM = {
   neck_shoulders: ["neck_side_stretch", "shoulder_rolls", "trap_stretch", "chest_opener", "chin_tuck"],

@@ -1278,6 +1278,43 @@ tr[data-live="true"] td { background: var(--accent-soft); }
   opacity: 0.6; font-variant-numeric: tabular-nums;
 }
 
+/* ── explicit theme override ──
+   The media query above follows the operating system. A host that offers its
+   own light/dark toggle stamps data-theme on the root, and that choice must
+   win in *both* directions — so the tokens are restated here rather than
+   relying on the media query, which cannot be overridden by a later match. */
+:root[data-theme="light"] {
+  --bg: #f7f4ef; --bg-sunk: #efeae2; --surface: #fffdfa; --surface-2: #f4f0e9;
+  --line: #e2dbd0; --line-strong: #d2c9ba;
+  --ink: #22201d; --ink-2: #56514a; --ink-3: #857e74;
+  --accent: #6d5b9e; --accent-soft: #ece7f6; --accent-ink: #4b3d75;
+  --green: #4f7d5a; --green-soft: #e4efe5;
+  --amber: #a4762f; --amber-soft: #f6edda;
+  --rose: #9c5545; --rose-soft: #f7e7e2;
+  --shadow: 0 1px 2px rgba(40, 34, 26, 0.05), 0 8px 24px rgba(40, 34, 26, 0.06);
+}
+:root[data-theme="dark"] {
+  --bg: #17161a; --bg-sunk: #121115; --surface: #201f24; --surface-2: #26252b;
+  --line: #33313a; --line-strong: #443f4d;
+  --ink: #f0ece6; --ink-2: #b9b3ab; --ink-3: #8a8379;
+  --accent: #a996de; --accent-soft: #2b2740; --accent-ink: #c9bcf0;
+  --green: #8fc09b; --green-soft: #1f2d23;
+  --amber: #d8b071; --amber-soft: #2e2718;
+  --rose: #d99a89; --rose-soft: #31211e;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+
+/* Learn cards are scannable summaries, not documents: name, state, a few
+   chips, the muscles worked, and a way in. Setup and form cues moved to the
+   demo dialog — the card's job is to help you choose, not to teach. */
+.exercise-guide-card { gap: 10px; }
+.exercise-muscles {
+  font-size: 0.83rem; color: var(--ink-2); margin: 0;
+  text-transform: lowercase;
+}
+.exercise-guide-card .exercise-demo-button { justify-self: start; padding: 8px 16px; }
+.exercise-library-grid { align-items: start; }
+
 </style>
 
     <div class="shell">
@@ -1592,6 +1629,37 @@ function areaBars(bySymptom = {}, labels = {}) {
  * this be mistaken for the real thing.
  */
 
+// Muscle map, mirrored from agent/muscles.yaml so the preview shows the
+// same teaching layer the box does.
+const MUSCLES = {
+  neck_side_stretch: { primary: ["upper trapezius", "levator scapulae"], feel: "a long line down the side of your neck into the top of your shoulder" },
+  chin_tuck: { primary: ["deep neck flexors"], feel: "the back of your neck lengthening, and a small effort at the front of your throat" },
+  shoulder_rolls: { primary: ["trapezius", "rhomboids"], feel: "your shoulder blades sliding up, back, and down your ribcage" },
+  trap_stretch: { primary: ["upper trapezius"], feel: "a broad stretch from your ear down to the anchored shoulder" },
+  chest_opener: { primary: ["pectoralis major", "pectoralis minor"], feel: "a widening across the front of your chest and collarbones" },
+  y_raise: { primary: ["lower trapezius", "rhomboids"], feel: "the muscles between and just below your shoulder blades switching on" },
+  seated_twist: { primary: ["obliques", "spinal rotators"], feel: "a gentle wringing through your waist and mid-back" },
+  cat_cow: { primary: ["spinal erectors", "abdominals"], feel: "each vertebra moving in turn, from your tailbone to your neck" },
+  thoracic_extension: { primary: ["thoracic erectors"], feel: "your upper back opening backward over the chair edge" },
+  hip_flexor_reset: { primary: ["psoas", "iliacus"], feel: "a stretch across the front of the hip on your back leg" },
+  standing_forward_fold: { primary: ["hamstrings", "spinal erectors"], feel: "a long release down the back of your legs and spine" },
+  hip_circles: { primary: ["hip rotators", "glute medius"], feel: "the joint moving freely where your leg meets your pelvis" },
+  squat: { primary: ["quadriceps", "glutes"], feel: "your thighs and glutes taking the load as you sit back" },
+  calf_raise: { primary: ["gastrocnemius", "soleus"], feel: "your calves shortening at the top, lengthening slowly on the way down" },
+  glute_squeeze: { primary: ["gluteus maximus"], feel: "both glutes contracting evenly underneath you" },
+  figure_four: { primary: ["piriformis", "gluteus medius"], feel: "a deep stretch in the back of the crossed hip" },
+  chair_squat: { primary: ["glutes", "quadriceps"], feel: "your glutes driving you up out of the chair" },
+  hip_hinge: { primary: ["glutes", "hamstrings"], feel: "your hips travelling backward and your hamstrings taking tension" },
+  lunge: { primary: ["quadriceps", "glutes"], feel: "the front thigh and glute working, and the back hip stretching open" },
+  wrist_stretch: { primary: ["wrist flexors", "wrist extensors"], feel: "a stretch along the inside or outside of your forearm" },
+  wrist_prayer: { primary: ["wrist flexors"], feel: "an even stretch across both inner forearms" },
+  finger_fan: { primary: ["hand intrinsics", "finger extensors"], feel: "your fingers spreading fully, then closing fully" },
+  eye_horizon: { primary: ["ciliary muscle"], feel: "your eyes softening as they let go of near focus" },
+  eye_palming: { primary: ["extraocular muscles"], feel: "warmth and complete darkness letting your eyes rest" },
+  eye_figure_eight: { primary: ["extraocular muscles"], feel: "your eyes travelling smoothly to the edges of their range" },
+  box_breath: { primary: ["diaphragm"], feel: "your lower ribs widening on the way in, softening on the way out" },
+};
+
 const MOVES = {
   neck_side_stretch: { name: "Neck side stretch", seconds: 45, targets: ["neck"], cues: { setup: "Sit tall. Let your right ear drift toward your right shoulder.", during: "Breathe out and let the shoulder drop away from your ear." } },
   shoulder_rolls: { name: "Shoulder rolls", seconds: 40, targets: ["shoulders"], cues: { setup: "Arms heavy. Roll your shoulders up, back, and down.", during: "Make the circle bigger — all the way back." } },
@@ -1620,6 +1688,10 @@ const MOVES = {
   hip_hinge: { name: "Standing hip hinge", seconds: 45, targets: ["glutes"], cues: { setup: "Feet hip width, soft knees, hands on your hip creases.", during: "Push your hips back, chest stays long. Squeeze your glutes to stand." } },
   lunge: { name: "Split-stance lunge", seconds: 70, targets: ["glutes", "legs"], cues: { setup: "Step your right foot back about a stride. Both toes pointing forward.", during: "Drop straight down — front shin vertical, torso tall." } },
 };
+
+for (const [key, m] of Object.entries(MUSCLES)) {
+  if (MOVES[key]) MOVES[key].muscles = m;
+}
 
 const BY_SYMPTOM = {
   neck_shoulders: ["neck_side_stretch", "shoulder_rolls", "trap_stretch", "chest_opener", "chin_tuck"],
@@ -4177,9 +4249,7 @@ function viewKnowledge() {
           <span class="pill">${areas.length} desk-work topics</span>
           <span class="pill info">Animated demos</span></div>
         <h1>Learn what helps during a desk day</h1>
-        <p class="hero-lede">Understand common desk-work discomfort, explore the movements
-          FlowReset can recommend, and review the same setup and form cues used by your
-          local coach.</p>
+        <p class="hero-lede">The movements FlowReset can recommend, and why each one helps.</p>
         <div class="row">
           <button class="btn" id="libraryReset">Start a reset</button>
           ${continueMove ? `<button class="btn secondary" data-demo-move="${esc(continueMove.key)}">
@@ -4199,8 +4269,6 @@ function viewKnowledge() {
         <span class="eyebrow">Use this library for</span>
         <strong>Education and general wellness</strong>
         <p class="small">${esc(kb.boundary)}</p>
-        <p class="tiny muted">The camera can observe broad movement signals; it cannot
-          diagnose pain, injury, posture disorders, or vision conditions.</p>
       </div>
     </div>
 
@@ -4210,7 +4278,6 @@ function viewKnowledge() {
           <span class="eyebrow">Explore by need</span>
           <h2 id="topicsTitle">Common desk-work concerns</h2>
         </div>
-        <p class="small muted">Choose a topic to see relevant exercise guides.</p>
       </div>
       <div class="grid library-grid">
         ${areas.map((area) => {
@@ -4246,8 +4313,7 @@ function viewKnowledge() {
         <div class="stack-sm">
           <span class="eyebrow">Approved movement catalog</span>
           <h2 id="exercisesTitle">Exercise guides</h2>
-          <p class="small muted">These are the only movements the agent can select. It cannot
-            invent a new exercise or replace the reviewed coaching language.</p>
+          <p class="small muted">The only movements the agent can select — it cannot invent one.</p>
         </div>
         <label class="library-search">
           <span class="tiny">Search exercises</span>
@@ -4287,18 +4353,11 @@ function viewKnowledge() {
                      ${hist.practiced}×</span>`
                 : `<span class="practice-badge new" title="You have not tried this yet">New</span>`}
             </div>
-            ${mus.primary?.length ? `<p class="exercise-muscles">
-              <span class="eyebrow">Works</span> ${esc(mus.primary.join(" · "))}</p>` : ""}
-            ${mus.feel ? `<p class="exercise-feel">You should feel ${esc(mus.feel)}.</p>` : ""}
-            <p class="exercise-targets">For: ${esc((move.targets || []).join(" · "))}</p>
-            <div class="exercise-instruction">
-              <span>Set up</span><p>${esc(move.cues?.setup || "Follow the coach's setup cue.")}</p>
-            </div>
-            <div class="exercise-instruction">
-              <span>Focus on</span><p>${esc(move.cues?.during || "Move slowly in a comfortable range.")}</p>
-            </div>
-            <button class="btn secondary exercise-demo-button" type="button"
-              data-demo-move="${esc(move.key)}">Watch motion demo</button>
+            ${mus.primary?.length
+              ? `<p class="exercise-muscles">${esc(mus.primary.join(" · "))}</p>`
+              : `<p class="exercise-muscles">${esc((move.targets || []).join(" · "))}</p>`}
+            <button class="btn subtle exercise-demo-button" type="button"
+              data-demo-move="${esc(move.key)}">How to do it</button>
           </article>`;
         }).join("")}
       </div>
@@ -4325,6 +4384,7 @@ function viewKnowledge() {
             <div class="exercise-instruction">
               <span>Focus on</span><p id="demoDuring"></p>
             </div>
+            <div class="exercise-instruction" id="demoFeel" hidden></div>
             <div class="notice small"><strong>Comfort first.</strong>
               This animation shows movement direction, not a clinical range target.
               Move slowly and stop if a movement causes or worsens pain.</div>
@@ -4427,6 +4487,18 @@ function viewKnowledge() {
         demoMove.cues?.setup || "Follow the coach's setup cue.";
       $("#demoDuring", wrap).textContent =
         demoMove.cues?.during || "Move slowly in a comfortable range.";
+      // The cards are scannable summaries now, so the anatomy detail they used
+      // to carry lives here — read once, when the user has chosen this move.
+      const demoFeel = $("#demoFeel", wrap);
+      if (demoFeel) {
+        const dm = demoMove.muscles || {};
+        demoFeel.hidden = !dm.feel;
+        if (dm.feel) {
+          demoFeel.innerHTML =
+            `<span>Where you should feel it</span><p>${esc(dm.feel)}.` +
+            (dm.not_feel ? ` <em>Not ${esc(dm.not_feel)}.</em>` : "") + `</p>`;
+        }
+      }
       $("#demoPause", wrap).textContent = "Pause animation";
       $("#demoPause", wrap).setAttribute("aria-pressed", "false");
       $("#demoStage", wrap).classList.remove("paused");
