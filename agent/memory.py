@@ -62,7 +62,7 @@ DEFAULT_PREFS: dict[str, Any] = {
     "can_stand": True,
     "preferred_duration_min": 3,
     "coach_style": "supportive",
-    "voice": True,
+    "voice": False,
     "watch_mode": False,
     "reminders": "off",
     "team": "unassigned",

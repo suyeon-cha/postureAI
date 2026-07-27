@@ -13,7 +13,8 @@ current unified application branch.
    exercise library.
 5. The plan shows its duration, movements, video-AI checks, limitations,
    provenance, and an expandable **Why this reset?**
-6. The user starts with local video AI or continues with timer and voice only.
+6. The user chooses quiet **Visual Coach** (standard) or **Conversational Coach**
+   (premium local speech + questions), then separately chooses whether to enable camera AI.
 7. MediaPipe evaluates body-pose routines. Qwen2.5-VL performs bounded local
    visibility/control checks for wrist and screen-rest routines.
 8. The user reports Better, Same, or Worse.
@@ -27,7 +28,7 @@ current unified application branch.
 | Capability | Status | Implementation |
 |---|---|---|
 | English onboarding and settings | Working | Goal, common areas, duration, local voice concern; standing is per session, tone/privacy stay in Settings |
-| Simplified desktop information architecture | Working | Two employee destinations: Reset and My insights; Settings is secondary |
+| Simplified desktop information architecture | Working | Three employee destinations: Reset, My insights, and Learn; Settings is secondary |
 | Per-session readiness guidance | Working | Space, camera choice, and comfort checks appear before every guided reset |
 | Plain-language and card check-in | Working | Deterministic parsing plus local agent |
 | Safety escalation | Working | Red-flag gate before routine selection |
@@ -39,7 +40,9 @@ current unified application branch.
 | Leg/glute video AI | Working on GB10 | Full-body framing, reps, selected alignment rules |
 | Wrist/hand video AI | MVP | Local Qwen2.5-VL visibility and controlled-movement check |
 | Screen-rest video AI | MVP | Local Qwen2.5-VL visibility/participation check |
-| Local voice input/output | Working when models installed | faster-whisper + Piper |
+| Standard/Premium coaching modes | Working | Visual Coach is quiet by default; Conversational Coach adds locally spoken cues and mid-session questions without duplicating the flow |
+| Local voice input/output | Working when models installed | faster-whisper + Piper; camera/VLM feedback is also spoken when Conversational Coach is on |
+| Educational motion demos | Working | Six clickable topics and 26 generated, pausable SVG exercise demos with approved setup/focus/safety cues |
 | Personal insights dashboard | Working | Non-repetitive routine, outcome, focus-area, next-action, and expandable history views |
 | Employer reporting | Working, admin-only | Aggregate-only query with 10-person floor; not exposed in employee navigation |
 | First-use wellness-data consent | Working | Required affirmative consent, adult-use acknowledgement, Not now path |
@@ -64,9 +67,10 @@ current unified application branch.
 4. **Professional content approval.** Content is labelled
    `hackathon_general_wellness`. Qualified professional review is required
    before production.
-5. **Original exercise videos.** Recording scripts are defined, but the four
-   team-recorded demonstrations still need to be filmed, compressed, licensed,
-   and added to an asset manifest.
+5. **Human-recorded exercise videos.** The MVP now includes generated offline
+   motion demos for every approved exercise. Production-quality human recordings
+   would still need professional review, consent, compression, licensing, captions,
+   transcripts, and an asset manifest.
 6. **Automated evaluation suite.** Manual and structural checks exist; the
    planned 25-case safety/retrieval/camera regression set is not fully encoded.
 7. **Production identity and access.** The hackathon build is single-user local.

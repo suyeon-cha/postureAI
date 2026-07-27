@@ -42,7 +42,7 @@ the prototype honestly; they are not a claim of HIPAA certification.
 |---|---|---|---|
 | **Reset** (the golden path) | You ask for one | Off until you opt in, per session | ✅ on |
 | **My insights** | You review your own routine, outcomes, and current focus | Not used | Private to the employee |
-| **Learn** | You browse desk-work education and all approved exercise guides | Not used | Shared, source-grounded content |
+| **Learn** | You browse desk-work education and 26 generated motion demos | Not used | Shared, source-grounded content |
 | **Watch** | Accumulated sitting / neck / crossed-leg time crosses a threshold, then it *offers* | Off unless you enable watch mode | ❌ off |
 
 Watch mode never starts a session, stops asking when you decline, and clears its accumulator
@@ -57,11 +57,15 @@ Settings remains a utility destination for coaching, camera, privacy, data, and 
    I have three minutes and can stand.”
 3. **Plan:** the agent reads private preferences and local history, then composes a plan only
    from the approved exercise library.
-4. **Consent:** the employee reviews “Why this?” and chooses whether to enable camera guidance.
-5. **Guide:** local pose analysis measures supported signals such as framing, range, tempo,
+4. **Choose coaching:** **Visual Coach** is the quiet standard mode. **Conversational Coach**
+   is an explicit premium toggle that adds local Piper speech and typed or local-Whisper
+   questions to the same session; it does not duplicate the movement flow.
+5. **Consent:** the employee reviews “Why this?” and chooses whether to enable camera guidance.
+6. **Guide:** local pose analysis measures supported signals such as framing, range, tempo,
    repetition phase, and selected form faults. The agent returns one authored cue at a time.
-6. **Reflect:** the employee selects Better, Same, or Worse.
-7. **Remember:** FlowReset stores the minimum session summary locally and updates the employee
+   In conversational mode, camera-generated form cues are also read aloud.
+7. **Reflect:** the employee selects Better, Same, or Worse.
+8. **Remember:** FlowReset stores the minimum session summary locally and updates the employee
    dashboard.
 
 ## Architecture
@@ -160,11 +164,21 @@ approval process, broader-body testing, and confidence-threshold evaluation.
 - **Voice input does not use the Web Speech API.** The UI records locally and POSTs to
   `/api/transcribe`, where faster-whisper runs on the box. The temp file is unlinked before
   the response returns. Voice can elaborate on concerns during onboarding and can describe a
-  new reset request. If the local Whisper model is unavailable, the mic control hides and the
-  text field remains usable.
+  new reset request. During a reset, the same path can ask exercise questions; the approved
+  local answer is spoken by Piper when Conversational Coach is enabled. If the local Whisper
+  model is unavailable, typed questions and Visual Coach remain usable.
 - Memory stores symptom, routine, duration, and a Better/Same/Worse answer. No landmarks, no
   video, no audio, no scores.
 - Settings has a real export, complete local deletion, and future-consent withdrawal.
+
+### Generated Learn demos
+
+The Learn tab contains six clickable desk-work topics and all 26 approved exercises. Each
+exercise opens a generated, looping SVG motion demo driven by the same move-to-motion mapping
+used in the live session. Setup, focus, duration, intensity, and safety language come from the
+approved local exercise records. Users can pause the animation or build a matching reset.
+These demos avoid third-party video licensing and remain available offline; they illustrate
+movement direction, not a clinical range target or validated form standard.
 
 ### B2B distribution without an employee Workspace view
 

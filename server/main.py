@@ -239,17 +239,25 @@ async def _vlm_check(event: dict[str, Any], frame_b64: str) -> None:
         cue = "Video AI check complete: movement is visible. Continue slowly and comfortably."
         status = "ready"
     await broadcast.send({"type": "video_ai", "status": status, "text": cue, "move": move})
+    # Visual-model feedback used to stop at the screen. Conversational mode
+    # now reads that same approved cue aloud; visual mode remains silent.
+    if memory.get_prefs().get("voice", False):
+        await _emit_audio(cue)
+
+
+async def _emit_audio(text: str) -> None:
+    audio = await asyncio.to_thread(tts.synthesize, text)
+    if audio:
+        await broadcast.send({
+            "type": "audio",
+            "wav_b64": base64.b64encode(audio).decode("ascii"),
+        })
 
 
 async def _emit_coach(message: dict[str, Any]) -> None:
     await broadcast.send(message)
     if message.get("speak") and message.get("text"):
-        audio = await asyncio.to_thread(tts.synthesize, message["text"])
-        if audio:
-            await broadcast.send({
-                "type": "audio",
-                "wav_b64": base64.b64encode(audio).decode("ascii"),
-            })
+        await _emit_audio(message["text"])
 
 
 @app.on_event("startup")
@@ -352,7 +360,7 @@ async def _handle_ui_message(msg: dict[str, Any]) -> None:
             await _emit_coach({
                 "type": "coach",
                 "text": routines.describe_move(first.move)["cues"]["setup"],
-                "speak": memory.get_prefs().get("voice", True),
+                "speak": memory.get_prefs().get("voice", False),
                 "routine": None,
             })
         return
@@ -386,7 +394,7 @@ async def _handle_ui_message(msg: dict[str, Any]) -> None:
                 await _emit_coach({
                     "type": "coach",
                     "text": routines.describe_move(tracker.move)["cues"]["setup"],
-                    "speak": memory.get_prefs().get("voice", True),
+                    "speak": memory.get_prefs().get("voice", False),
                     "routine": None,
                 })
         return

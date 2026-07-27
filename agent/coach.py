@@ -223,7 +223,7 @@ class FlowResetAgent:
         return {
             "type": "coach",
             "text": explanation,
-            "speak": prefs.get("voice", True),
+            "speak": prefs.get("voice", False),
             "routine": {"duration_min": plan["duration_min"], "moves": plan["moves"]},
             "plan": plan,
             "session_id": self.session_id,
@@ -348,7 +348,7 @@ class FlowResetAgent:
         return {
             "type": "coach",
             "text": text,
-            "speak": prefs.get("voice", True),
+            "speak": prefs.get("voice", False),
             "routine": None,
             "offer": {"symptom": offer_symptom, "duration_min": 2},
         }
@@ -369,7 +369,10 @@ class FlowResetAgent:
                 "result": result,
             }
         )
-        return self._speak(result.get("answer"), prefs, force=True)
+        message = self._speak(result.get("answer"), prefs, force=True)
+        if message:
+            message["reply_to"] = "question"
+        return message
 
     def _mind_muscle_cue(self, move: str | None) -> str | None:
         """Name the muscle while they can feel it working.
@@ -415,7 +418,7 @@ class FlowResetAgent:
         return {
             "type": "coach",
             "text": persona.sanitize(text),
-            "speak": prefs.get("voice", True),
+            "speak": prefs.get("voice", False),
             "routine": None,
         }
 
@@ -455,7 +458,7 @@ class FlowResetAgent:
         return {
             "type": "coach",
             "text": self._closing_line(response),
-            "speak": memory.get_prefs(self.user_id).get("voice", True),
+            "speak": memory.get_prefs(self.user_id).get("voice", False),
             "routine": None,
             "insight": self._insight(summary),
             "summary": summary,

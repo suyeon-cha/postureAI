@@ -148,7 +148,9 @@ const S = {
     can_stand: true,
     preferred_duration_min: 3,
     coach_style: "supportive",
-    voice: true,
+    // Quiet visual coaching is the standard experience. Users explicitly opt
+    // into the conversational coach for local Piper playback and Whisper Q&A.
+    voice: false,
     watch_mode: false,
   },
   // `touched` records which constraints the user actually set. Untouched chips
@@ -175,6 +177,8 @@ const S = {
   response: null,
   insight: null,
   videoStatus: null,
+  conversation: [],
+  voiceState: "off",
   onboarded: localStorage.getItem("flowreset.onboarded") === "1",
   healthConsent:
     localStorage.getItem("flowreset.healthDataConsent") === "1" &&
@@ -190,6 +194,7 @@ let videoStream = null;
 let frameTimer = null;
 let planningTimer = null;
 let toastTimer = null;
+let currentAudio = null;
 
 // ─────────────────────────── transport ───────────────────────────
 
@@ -300,7 +305,14 @@ function handle(msg) {
         render();
       } else {
         S.cue = msg.text;
-        if (S.screen === "session") paintCue();
+        if (S.screen === "session") {
+          if (msg.reply_to === "question" || S.voiceState === "thinking") {
+            S.conversation.push({ role: "coach", text: msg.text });
+            S.voiceState = S.prefs.voice ? "ready" : "off";
+          }
+          paintCue();
+          paintVoiceCoach();
+        }
       }
       break;
 
@@ -336,7 +348,20 @@ function handle(msg) {
       break;
 
     case "audio":
-      if (S.prefs.voice) new Audio(`data:audio/wav;base64,${msg.wav_b64}`).play().catch(() => {});
+      if (S.prefs.voice) {
+        if (currentAudio) currentAudio.pause();
+        currentAudio = new Audio(`data:audio/wav;base64,${msg.wav_b64}`);
+        S.voiceState = "speaking";
+        paintVoiceCoach();
+        currentAudio.addEventListener("ended", () => {
+          S.voiceState = S.prefs.voice ? "ready" : "off";
+          paintVoiceCoach();
+        }, { once: true });
+        currentAudio.play().catch(() => {
+          S.voiceState = "ready";
+          paintVoiceCoach();
+        });
+      }
       break;
 
     case "video_ai":
@@ -345,6 +370,7 @@ function handle(msg) {
         S.cue = msg.text;
         paintCue();
         paintVideoStatus();
+        paintVoiceCoach();
       }
       break;
   }
@@ -548,7 +574,12 @@ function render() {
   // each one would otherwise leave a live stream orphaned behind a black
   // panel. Re-attaching here covers all of them; attachStream() no-ops when
   // there is no stream or no element.
-  if (S.screen === "session") { attachStream(); paintSession(); paintCue(); }
+  if (S.screen === "session") {
+    attachStream();
+    paintSession();
+    paintCue();
+    paintVoiceCoach();
+  }
   window.scrollTo({ top: 0, behavior: "instant" });
   app.focus({ preventScroll: true });
 }
@@ -827,12 +858,15 @@ function finishOnboarding() {
 }
 
 function savePrefs() {
-  if (mock) { Object.assign(mock.prefs, S.prefs); return; }
-  fetch("/api/prefs", {
+  if (mock) {
+    Object.assign(mock.prefs, S.prefs);
+    return Promise.resolve(S.prefs);
+  }
+  return fetch("/api/prefs", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(S.prefs),
-  }).catch(() => {});
+  }).then((r) => r.json()).catch(() => null);
 }
 
 function viewHome() {
@@ -1013,8 +1047,8 @@ function viewPlan() {
 
     <div class="card stack">
       <h1>${esc(p.symptom_label)} reset</h1>
-      <p class="hero-lede">Your plan is ready. Review the sequence, then choose camera
-        coaching or timer-and-voice guidance.</p>
+      <p class="hero-lede">Your plan is ready. Review the sequence, choose how your coach
+        communicates, then decide whether to add private camera feedback.</p>
 
       <ol class="plan-moves">
         ${p.moves.map((k, i) => {
@@ -1045,9 +1079,28 @@ function viewPlan() {
         </div>
         <ol class="ready-list">
           <li><strong>Make space.</strong><span>Keep a stable chair nearby and clear the floor.</span></li>
-          <li><strong>Choose guidance.</strong><span>Camera coaching is optional and processed locally; timer and voice always work.</span></li>
+          <li><strong>Choose your coach.</strong><span>Keep it quiet and visual, or add a two-way local voice conversation.</span></li>
           <li><strong>Stay comfortable.</strong><span>Use a comfortable range and stop if movement causes or worsens pain.</span></li>
         </ol>
+        <fieldset class="coach-mode-picker">
+          <legend>
+            <span class="eyebrow">Coaching mode</span>
+            <strong>How should FlowReset guide this session?</strong>
+          </legend>
+          <div class="coach-mode-options">
+            <button class="coach-mode" type="button" data-coach-mode="visual"
+              aria-pressed="${!S.prefs.voice}">
+              <span class="mode-heading"><strong>Visual Coach</strong><span class="plan-tag">Standard</span></span>
+              <span>Camera feedback, movement guide, and text tips. Quiet by default.</span>
+            </button>
+            <button class="coach-mode" type="button" data-coach-mode="voice"
+              aria-pressed="${S.prefs.voice}">
+              <span class="mode-heading"><strong>Conversational Coach</strong><span class="plan-tag premium">Premium</span></span>
+              <span>Everything in Visual Coach, plus spoken tips and voice or typed questions.</span>
+              <small>Whisper + Piper run locally on the GB10.</small>
+            </button>
+          </div>
+        </fieldset>
         <details class="camera-details">
           <summary>What the camera checks</summary>
           <p class="small muted">${esc(kb?.camera?.checks?.join(" · ") || "Visibility, pace, and broad movement signals.")}</p>
@@ -1071,15 +1124,29 @@ function viewPlan() {
 
   $("#startCam", wrap).addEventListener("click", () => beginSession(true));
   $("#startNoCam", wrap).addEventListener("click", () => beginSession(false));
+  wrap.querySelectorAll("[data-coach-mode]").forEach((button) => {
+    button.addEventListener("click", () => {
+      S.prefs.voice = button.dataset.coachMode === "voice";
+      S.voiceState = S.prefs.voice ? "ready" : "off";
+      wrap.querySelectorAll("[data-coach-mode]").forEach((item) =>
+        item.setAttribute("aria-pressed", String(item === button)));
+      savePrefs();
+    });
+  });
   $("#back", wrap).addEventListener("click", () => { S.plan = null; go("home"); });
   return wrap;
 }
 
 async function beginSession(withCamera) {
+  // Persist the selected mode before the start event so the very first setup
+  // cue is spoken only when Conversational Coach is actually selected.
+  await savePrefs();
   let camera = false;
   if (withCamera) camera = await startCamera();
   S.cameraOn = camera;
   S.videoStatus = null;
+  S.conversation = [];
+  S.voiceState = S.prefs.voice ? "ready" : "off";
   send({ type: "start_reset", camera, symptom: S.plan.symptom, duration_min: S.plan.duration_min, can_stand: S.intake.can_stand });
   S.screen = "session";
   render();
@@ -1129,7 +1196,7 @@ function viewSession() {
         <div class="video-status" id="videoStatus" data-state="${S.cameraOn ? "scanning" : "off"}">
           <span class="video-status-dot"></span>
           <div><strong>${S.cameraOn ? "Video AI is finding your position" : "Video AI is off"}</strong>
-            <span>${S.cameraOn ? "Keep the relevant body area in frame." : "Timer and voice guidance remain available."}</span></div>
+            <span>${S.cameraOn ? "Keep the relevant body area in frame." : `${S.prefs.voice ? "Conversational" : "Visual"} guidance remains available.`}</span></div>
         </div>
         <div class="cue-banner" id="cueBanner"></div>
         <div class="cam-wrap" id="camWrap">
@@ -1150,8 +1217,8 @@ function viewSession() {
             title="Show or hide the movement guide">Guide</button>
           <div class="cam-off" id="camOff" ${S.cameraOn ? "hidden" : ""}>
             <strong>Camera is off</strong>
-            <p class="small muted">Use the animated movement guide above with text and
-              voice, or turn the camera on when you want form feedback.</p>
+            <p class="small muted">Use the animated movement guide and text tips, or turn
+              the camera on when you want form feedback.</p>
           </div>
           <div class="cam-flag" id="camFlag" ${S.cameraOn ? "" : "hidden"}>
             ${S.preview ? "Live camera preview · AI check simulated" : "Pose on GB10 · not recorded"}
@@ -1167,26 +1234,62 @@ function viewSession() {
           Get into position
         </button>
         <div class="row small muted" id="metrics"></div>
-        <div class="ask-row">
-          <span class="small muted">Ask mid-session:</span>
-          <button class="chip-btn" data-ask="Where should I feel this?">Where should I feel this?</button>
-          <button class="chip-btn" data-ask="What muscles am I working?">What muscles?</button>
-          <button class="chip-btn" data-ask="Am I doing it right?">Am I doing it right?</button>
-        </div>
+        <section class="voice-coach" id="voicePanel" data-enabled="${S.prefs.voice}"
+          aria-labelledby="voiceCoachTitle">
+          <div class="voice-coach-head">
+            <div>
+              <span class="eyebrow">Optional upgrade · Premium</span>
+              <h2 id="voiceCoachTitle">Conversational Coach</h2>
+              <p class="small muted">Adds spoken tips and questions to this same guided session.</p>
+            </div>
+            <button class="toggle" id="voiceModeToggle" type="button"
+              aria-pressed="${S.prefs.voice}" aria-label="Conversational Coach"></button>
+          </div>
+          <div class="voice-off-note" id="voiceOffNote" ${S.prefs.voice ? "hidden" : ""}>
+            <strong>Visual Coach is active.</strong>
+            <span class="small muted">Your camera checks, movement animation, and text cues continue quietly.</span>
+          </div>
+          <div class="voice-conversation" id="voiceConversation" ${S.prefs.voice ? "" : "hidden"}>
+            <div class="voice-presence" role="status">
+              <span class="voice-orb" aria-hidden="true"></span>
+              <div><strong id="voiceStateLabel">Coach ready</strong>
+                <span class="tiny muted" id="coachVoiceStatus">${S.preview
+                  ? "Conversation is simulated here; Whisper and Piper connect on the GB10."
+                  : "Speech and transcription stay on the GB10."}</span></div>
+            </div>
+            <div class="conversation-log" id="conversationLog" aria-live="polite"></div>
+            <div class="voice-suggestions" aria-label="Suggested questions">
+              <button class="chip-btn" type="button" data-ask="Where should I feel this?">Where should I feel this?</button>
+              <button class="chip-btn" type="button" data-ask="What muscles am I working?">What muscles?</button>
+              <button class="chip-btn" type="button" data-ask="Am I doing it right?">Am I doing it right?</button>
+            </div>
+            <form class="coach-question" id="coachQuestionForm">
+              <label class="sr-only" for="coachQuestion">Ask your coach</label>
+              <input id="coachQuestion" type="text" autocomplete="off" placeholder="Ask about this movement…" />
+              <button class="btn secondary" id="coachMic" type="button" aria-pressed="false">Ask by voice</button>
+              <button class="btn" type="submit">Send</button>
+            </form>
+          </div>
+        </section>
       </div>
     </div>
   </div>`);
 
-  // Answered from authored anatomy, so these work with speech-to-text absent.
-  // A Whisper transcript hits the same endpoint when voice input is available.
-  wrap.querySelectorAll("[data-ask]").forEach((b) =>
-    b.addEventListener("click", () =>
-      fetch("/api/ask", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: b.dataset.ask, move: S.session?.move }),
-      }).catch(() => {})
-    )
+  $("#voiceModeToggle", wrap).addEventListener("click", () => setVoiceMode(!S.prefs.voice));
+  wrap.querySelectorAll("[data-ask]").forEach((button) =>
+    button.addEventListener("click", () => askCoach(button.dataset.ask)));
+  $("#coachQuestionForm", wrap).addEventListener("submit", (event) => {
+    event.preventDefault();
+    const input = $("#coachQuestion", wrap);
+    askCoach(input.value);
+    input.value = "";
+  });
+  bindMic(
+    $("#coachMic", wrap),
+    $("#coachQuestion", wrap),
+    $("#coachVoiceStatus", wrap),
+    (text) => askCoach(text),
+    { keepVisible: true, idleLabel: "Ask by voice" },
   );
 
   $("#pause", wrap).addEventListener("click", (e) => {
@@ -1212,7 +1315,89 @@ function viewSession() {
     e.currentTarget.hidden = true;
   });
   paintVideoStatus();
+  paintVoiceCoach();
   return wrap;
+}
+
+async function setVoiceMode(on) {
+  S.prefs.voice = !!on;
+  S.voiceState = on ? "ready" : "off";
+  if (!on && currentAudio) {
+    currentAudio.pause();
+    currentAudio = null;
+  }
+  if (on && !S.conversation.length) {
+    S.conversation.push({
+      role: "coach",
+      text: S.preview
+        ? "Conversational Coach is on. Ask a question to preview the flow; speech connects on the GB10."
+        : "Conversational Coach is on. I’ll read new tips aloud, and you can ask me about this movement.",
+    });
+  }
+  await savePrefs();
+  render();
+}
+
+async function askCoach(question) {
+  const text = String(question || "").trim();
+  if (!text || !S.prefs.voice) return;
+  S.conversation.push({ role: "you", text });
+  S.voiceState = "thinking";
+  paintVoiceCoach();
+
+  if (mock) {
+    send({ type: "ask", text, move: S.live?.move });
+    return;
+  }
+
+  try {
+    const response = await fetch("/api/ask", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ text, move: S.live?.move }),
+    });
+    if (!response.ok) throw new Error("question failed");
+  } catch {
+    S.voiceState = "ready";
+    S.conversation.push({
+      role: "coach",
+      text: "I couldn’t answer that just now. Keep moving comfortably or try again.",
+    });
+    paintVoiceCoach();
+  }
+}
+
+function paintVoiceCoach() {
+  const panel = $("#voicePanel");
+  if (!panel) return;
+  panel.dataset.enabled = String(S.prefs.voice);
+  const toggle = $("#voiceModeToggle");
+  if (toggle) toggle.setAttribute("aria-pressed", String(S.prefs.voice));
+  const off = $("#voiceOffNote");
+  const conversation = $("#voiceConversation");
+  if (off) off.hidden = S.prefs.voice;
+  if (conversation) conversation.hidden = !S.prefs.voice;
+  if (!S.prefs.voice) return;
+
+  const labels = {
+    ready: "Coach ready",
+    listening: "Listening…",
+    thinking: "Thinking locally…",
+    speaking: "Speaking…",
+  };
+  const state = $("#voiceStateLabel");
+  if (state) state.textContent = labels[S.voiceState] || "Coach ready";
+  const log = $("#conversationLog");
+  if (log) {
+    const messages = S.conversation.slice(-4);
+    log.innerHTML = messages.length
+      ? messages.map((message) => `<div class="conversation-message" data-role="${esc(message.role)}">
+          <span>${message.role === "you" ? "You" : "Coach"}</span>
+          <p>${esc(message.text)}</p>
+        </div>`).join("")
+      : `<p class="small muted">Ask a question or keep moving. New form tips will be read aloud.</p>`;
+    log.scrollTop = log.scrollHeight;
+  }
 }
 
 function paintSession() {
@@ -1287,7 +1472,7 @@ function paintSession() {
          <span class="pill ${live.tempo === "good" ? "good" : "warn"}">${live.tempo === "good" ? "Controlled pace" : "Slow down"}</span>
          ${live.target_reps ? `<span class="pill">${live.rep}/${live.target_reps} completed</span>` : ""}
          <span class="pill ${live.form === "ok" ? "good" : "warn"}">${live.form === "ok" ? "Movement visible" : "Check the coaching cue"}</span>`
-      : `<span class="pill">Guidance: text and voice</span>`;
+      : `<span class="pill">Guidance: ${S.prefs.voice ? "visual + conversation" : "visual"}</span>`;
   }
 
   paintFrameGo();
@@ -1322,7 +1507,7 @@ function paintVideoStatus() {
   if (!S.cameraOn) {
     box.dataset.state = "off";
     box.innerHTML = `<span class="video-status-dot"></span><div><strong>Video AI is off</strong>
-      <span>Timer and voice guidance remain available.</span></div>`;
+      <span>${S.prefs.voice ? "Conversational" : "Visual"} guidance remains available.</span></div>`;
     return;
   }
   if (S.preview && videoStream) {
@@ -1725,7 +1910,8 @@ function viewKnowledge() {
       <div class="stack-sm">
         <div class="row"><span class="pill good">Approved wellness content</span>
           <span class="pill">${moves.length} exercise guides</span>
-          <span class="pill">${areas.length} desk-work topics</span></div>
+          <span class="pill">${areas.length} desk-work topics</span>
+          <span class="pill info">Animated demos</span></div>
         <h1>Learn what helps during a desk day</h1>
         <p class="hero-lede">Understand common desk-work discomfort, explore the movements
           FlowReset can recommend, and review the same setup and form cues used by your
@@ -1757,12 +1943,15 @@ function viewKnowledge() {
           const topic = topicByArea[area];
           if (!topic) return "";
           return `<article class="card library-topic stack-sm">
-            <div class="row"><span class="library-icon">${libraryIcon(area)}</span>
-              <div><span class="eyebrow">${esc(labels[area] || area.replace(/_/g, " "))}</span>
-                <h3>${esc(topic.title)}</h3></div></div>
-            <p class="small muted">${esc(topic.rationale)}</p>
+            <button class="library-topic-open" type="button" data-library-filter="${esc(area)}"
+              aria-label="View ${esc(labels[area] || area.replace(/_/g, " "))} exercises">
+              <span class="row"><span class="library-icon">${libraryIcon(area)}</span>
+                <span><span class="eyebrow">${esc(labels[area] || area.replace(/_/g, " "))}</span>
+                  <strong>${esc(topic.title)}</strong></span></span>
+              <span class="small muted">${esc(topic.rationale)}</span>
+              <span class="topic-open-hint">View exercises <span aria-hidden="true">→</span></span>
+            </button>
             <div class="row library-topic-actions">
-              <button class="btn secondary" data-library-filter="${esc(area)}">View exercises</button>
               <button class="btn subtle" data-library-start="${esc(area)}">Build a reset</button>
             </div>
             <details><summary>Evidence and camera limits</summary>
@@ -1819,6 +2008,8 @@ function viewKnowledge() {
             <div class="exercise-instruction">
               <span>Focus on</span><p>${esc(move.cues?.during || "Move slowly in a comfortable range.")}</p>
             </div>
+            <button class="btn secondary exercise-demo-button" type="button"
+              data-demo-move="${esc(move.key)}">Watch motion demo</button>
           </article>`;
         }).join("")}
       </div>
@@ -1827,6 +2018,35 @@ function viewKnowledge() {
         Try a body area such as neck, hips, wrists, eyes, or glutes.
       </div>
     </section>
+
+    <dialog class="exercise-demo-dialog" id="exerciseDemo" aria-labelledby="demoTitle">
+      <div class="exercise-demo-shell">
+        <div class="exercise-demo-head">
+          <div><span class="eyebrow">Generated movement demo</span>
+            <h2 id="demoTitle">Exercise demo</h2></div>
+          <button class="btn subtle" id="demoClose" type="button" aria-label="Close exercise demo">Close</button>
+        </div>
+        <div class="exercise-demo-layout">
+          <div class="exercise-demo-stage" id="demoStage"></div>
+          <div class="stack">
+            <div class="row" id="demoMeta"></div>
+            <div class="exercise-instruction">
+              <span>Set up</span><p id="demoSetup"></p>
+            </div>
+            <div class="exercise-instruction">
+              <span>Focus on</span><p id="demoDuring"></p>
+            </div>
+            <div class="notice small"><strong>Comfort first.</strong>
+              This animation shows movement direction, not a clinical range target.
+              Move slowly and stop if a movement causes or worsens pain.</div>
+            <div class="row">
+              <button class="btn secondary" id="demoPause" type="button" aria-pressed="false">Pause animation</button>
+              <button class="btn" id="demoReset" type="button">Build a reset</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </dialog>
 
     <details class="card library-governance">
       <summary><span><strong>How this educational content is governed</strong>
@@ -1883,6 +2103,45 @@ function viewKnowledge() {
       S.intake.touched.symptom = true;
       go("home");
     }));
+  const dialog = $("#exerciseDemo", wrap);
+  let demoMove = null;
+  wrap.querySelectorAll("[data-demo-move]").forEach((button) =>
+    button.addEventListener("click", () => {
+      demoMove = moves.find((move) => move.key === button.dataset.demoMove);
+      if (!demoMove) return;
+      $("#demoTitle", wrap).textContent = demoMove.name || demoMove.key.replace(/_/g, " ");
+      $("#demoStage", wrap).innerHTML = movementGuideMarkup(demoMove.key);
+      $("#demoMeta", wrap).innerHTML = `
+        <span class="pill">${esc(demoMove.seconds || "—")} sec</span>
+        <span class="pill">${demoMove.seated_ok === false ? "Standing" : "Seated option"}</span>
+        <span class="pill">${esc(demoMove.intensity || "gentle")}</span>`;
+      $("#demoSetup", wrap).textContent =
+        demoMove.cues?.setup || "Follow the coach's setup cue.";
+      $("#demoDuring", wrap).textContent =
+        demoMove.cues?.during || "Move slowly in a comfortable range.";
+      $("#demoPause", wrap).textContent = "Pause animation";
+      $("#demoPause", wrap).setAttribute("aria-pressed", "false");
+      $("#demoStage", wrap).classList.remove("paused");
+      if (typeof dialog.showModal === "function") dialog.showModal();
+      else dialog.setAttribute("open", "");
+    }));
+  $("#demoClose", wrap).addEventListener("click", () => dialog.close());
+  $("#demoPause", wrap).addEventListener("click", (event) => {
+    const paused = event.currentTarget.getAttribute("aria-pressed") !== "true";
+    event.currentTarget.setAttribute("aria-pressed", String(paused));
+    event.currentTarget.textContent = paused ? "Play animation" : "Pause animation";
+    $("#demoStage", wrap).classList.toggle("paused", paused);
+  });
+  $("#demoReset", wrap).addEventListener("click", () => {
+    if (!demoMove) return;
+    S.intake.symptom = demoMove.area;
+    S.intake.touched.symptom = true;
+    dialog.close();
+    go("home");
+  });
+  dialog.addEventListener("click", (event) => {
+    if (event.target === dialog) dialog.close();
+  });
   search.addEventListener("input", applyLibraryFilter);
   $("#libraryReset", wrap).addEventListener("click", () => go("home"));
 
@@ -1982,9 +2241,9 @@ function viewSettings() {
         <div class="grid option-grid" id="style"></div></div>
       <div class="stack-sm"><span class="eyebrow">Default session length</span>
         <div class="row" id="dur"></div></div>
-      <div class="switch"><div class="txt"><strong>Spoken cues</strong>
-        <span class="small muted">Piper text-to-speech, synthesised on the box.</span></div>
-        <button class="toggle" id="voice" aria-pressed="${S.prefs.voice}" aria-label="Spoken cues"></button></div>
+      <div class="notice small"><strong>Coaching mode is chosen per session.</strong>
+        Visual Coach stays quiet; Conversational Coach adds local Piper speech and
+        Whisper questions without sending audio to an external AI service.</div>
     </div>
 
     <div class="card stack">
@@ -2058,7 +2317,6 @@ function viewSettings() {
       if (extra) extra(S.prefs[key]);
     });
   };
-  toggle("voice", "voice");
   toggle("watch", "watch_mode", (on) => send({ type: "watch_mode", on }));
 
   $("#privacyCenter", wrap).addEventListener("click", () => { S.returnTo = "settings"; go("privacy"); });
@@ -2299,14 +2557,24 @@ function sttAvailable() {
   return !S.preview && !!S.health?.stt?.available && !!navigator.mediaDevices?.getUserMedia;
 }
 
-/** Wire a mic button to a target textarea. Returns nothing; degrades silently. */
-function bindMic(button, textarea, statusEl) {
+/** Wire a mic button to a target field. The optional callback lets a session
+ * transcript go straight to the local Q&A agent after Whisper finishes. */
+function bindMic(button, textarea, statusEl, onTranscript = null, options = {}) {
   if (!button) return;
+  const idleLabel = options.idleLabel || "🎤 Speak instead";
 
   if (!sttAvailable()) {
-    button.hidden = true;
+    if (options.keepVisible) {
+      button.disabled = true;
+      button.textContent = "Voice on GB10";
+      button.title = "Local Whisper voice input becomes available when connected to the GB10.";
+    } else {
+      button.hidden = true;
+    }
     if (statusEl && S.preview) {
-      statusEl.textContent = "Voice input needs the box — type instead for now.";
+      statusEl.textContent = options.keepVisible
+        ? "Conversation is simulated here; Whisper and Piper connect on the GB10."
+        : "Voice input needs the box — type instead for now.";
     } else if (statusEl && S.health?.stt?.error) {
       statusEl.textContent = "Voice input unavailable — type instead.";
     }
@@ -2333,12 +2601,20 @@ function bindMic(button, textarea, statusEl) {
 
     recordedChunks = [];
     recorder = new MediaRecorder(stream);
+    if (onTranscript) {
+      S.voiceState = "listening";
+      paintVoiceCoach();
+    }
     recorder.addEventListener("dataavailable", (e) => {
       if (e.data.size) recordedChunks.push(e.data);
     });
     recorder.addEventListener("stop", async () => {
       stream.getTracks().forEach((t) => t.stop());
       setState("Transcribing…", false);
+      if (onTranscript) {
+        S.voiceState = "thinking";
+        paintVoiceCoach();
+      }
       const blob = new Blob(recordedChunks, { type: "audio/webm" });
       const b64 = await new Promise((resolve) => {
         const fr = new FileReader();
@@ -2355,12 +2631,21 @@ function bindMic(button, textarea, statusEl) {
       } catch {
         /* fall through to the error path below */
       }
-      setState("🎤 Speak instead", false);
+      setState(idleLabel, false);
       if (result.ok && result.text) {
         textarea.value = textarea.value ? `${textarea.value} ${result.text}` : result.text;
-        if (statusEl) statusEl.textContent = "Transcribed on the box. Edit it if you like.";
+        if (onTranscript) {
+          const transcript = textarea.value;
+          textarea.value = "";
+          if (statusEl) statusEl.textContent = "Transcribed locally. Asking your coach…";
+          onTranscript(transcript);
+        } else if (statusEl) {
+          statusEl.textContent = "Transcribed on the box. Edit it if you like.";
+        }
       } else if (statusEl) {
+        if (onTranscript) S.voiceState = "ready";
         statusEl.textContent = result.error ? "Didn't catch that — try again or type it." : "";
+        paintVoiceCoach();
       }
     });
 

@@ -143,7 +143,7 @@ export class MockBackend {
       can_stand: true,
       preferred_duration_min: 3,
       coach_style: "supportive",
-      voice: true,
+      voice: false,
       watch_mode: false,
     };
     this.plan = null;
@@ -271,6 +271,36 @@ export class MockBackend {
   _on_pause(msg) { if (this.session) this.session.paused = !!msg.on; }
   _on_skip() { this._advance(); }
   _on_watch_mode(msg) { this.prefs.watch_mode = !!msg.on; this._emit({ type: "watch_mode", on: !!msg.on }); }
+
+  _on_ask({ text, move }) {
+    const spec = MOVES[move] || null;
+    const question = String(text || "").toLowerCase();
+    let answer;
+    if (/where|feel/.test(question)) {
+      answer = spec
+        ? `You should feel a comfortable effort around your ${spec.targets.join(" and ")}. Stop if it feels sharp, painful, or causes numbness.`
+        : "Keep the movement comfortable. Stop if it feels sharp, painful, or causes numbness.";
+    } else if (/muscle/.test(question)) {
+      answer = spec
+        ? `This movement mainly targets your ${spec.targets.join(" and ")}. Keep breathing and avoid forcing the range.`
+        : "The active targets will appear beside the current movement when the session starts.";
+    } else if (/right|correct|form/.test(question)) {
+      answer = this.session?.camera
+        ? "In this preview, camera evaluation is simulated. On the GB10, I check visibility, pace, and approved alignment signals; compare yourself with the movement guide."
+        : "Your camera is off, so I can’t assess your movement. Follow the animation slowly, or turn the camera on for local form feedback.";
+    } else {
+      answer = spec
+        ? `${spec.cues.during} Stay within a comfortable range, and stop if symptoms worsen.`
+        : "Keep the movement slow and comfortable. Ask where you should feel it, which muscles are working, or whether your form is visible.";
+    }
+    setTimeout(() => this._emit({
+      type: "coach",
+      text: answer,
+      speak: this.prefs.voice,
+      routine: null,
+      reply_to: "question",
+    }), 360);
+  }
 
   _on_end_session(msg) {
     const plan = this.plan;
