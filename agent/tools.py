@@ -53,8 +53,12 @@ def select_approved_routine(
     can_stand: bool = True,
     intensity: str = "moderate",
     user_id: str = "local",
+    symptoms: list[str] | None = None,
 ) -> dict[str, Any]:
     """Compose a routine from the approved library only.
+
+    `symptoms` carries a multi-area check-in; `symptom` is the single-area
+    form and stays the primary area.
 
     Moves the user rated Worse are passed as `avoid`, so memory changes the
     recommendation rather than just decorating it.
@@ -62,6 +66,7 @@ def select_approved_routine(
     hist = memory.summary(user_id=user_id)
     plan = routines.compose(
         symptom=symptom,
+        symptoms=symptoms,
         duration_min=int(duration_min),
         can_stand=bool(can_stand),
         intensity=intensity,
@@ -69,6 +74,7 @@ def select_approved_routine(
     )
     return {
         "symptom": plan["symptom"],
+        "symptoms": plan["symptoms"],
         "symptom_label": plan["symptom_label"],
         "duration_min": plan["duration_min"],
         "estimated_seconds": plan["estimated_seconds"],
@@ -313,6 +319,25 @@ SCHEMAS: list[dict[str, Any]] = [
                             "tired_eyes",
                             "general",
                         ],
+                    },
+                    "symptoms": {
+                        "type": "array",
+                        "description": (
+                            "Every area the user checked in for, most important "
+                            "first, when they named more than one. The routine "
+                            "then rotates between them."
+                        ),
+                        "items": {
+                            "type": "string",
+                            "enum": [
+                                "neck_shoulders",
+                                "back_hips",
+                                "legs_glutes",
+                                "wrists_hands",
+                                "tired_eyes",
+                                "general",
+                            ],
+                        },
                     },
                     "duration_min": {
                         "type": "integer",

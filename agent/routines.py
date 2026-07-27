@@ -12,11 +12,71 @@ a time budget over moves ranked for the symptom.
 from __future__ import annotations
 
 import functools
+import os
 import random
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+# Pin the circuit to one exact move list regardless of what the user picked.
+# Empty (the default) means normal composition. Blunt instrument — prefer
+# DEMO_RECIPES, which still responds to the check-in.
+DEMO_MOVES: list[str] = [
+    m.strip()
+    for m in os.environ.get("FLOWRESET_DEMO_MOVES", "").split(",")
+    if m.strip()
+]
+
+# Fixed circuits for the demo, keyed by the exact set of areas checked in plus
+# whether the user can stand.
+#
+# The composer is already deterministic in its *ranking* — the plan never comes
+# from model prose — but it shuffles the tail of a round when no seed is given,
+# so the same check-in can yield a different order twice running. On a demo we
+# want the workout to be the same every rehearsal and every take, and we want to
+# know exactly which moves the camera will be asked to judge.
+#
+# Seated variants drop the lunge: it is `seated_ok: false` in the library, and
+# substituting silently would be worse than choosing a different move on purpose.
+DEMO_RECIPES: dict[tuple[frozenset, bool], list[str]] = {
+    # The headline demo: two upper-body holds, then the full-body move we coach.
+    # The lunge carries `sides: 2`, so one entry already means both legs.
+    #
+    # Both the standing and seated keys give the same circuit, because the demo
+    # should not change shape depending on which toggle was tapped. Note this
+    # means the seated path prescribes the lunge, which the library marks
+    # `seated_ok: false` — deliberate for the demo, wrong for a real seated user.
+    (frozenset({"neck_shoulders", "legs_glutes"}), True): [
+        "neck_side_stretch", "trap_stretch", "lunge",
+    ],
+    (frozenset({"neck_shoulders", "legs_glutes"}), False): [
+        "neck_side_stretch", "trap_stretch", "lunge",
+    ],
+    (frozenset({"neck_shoulders"}), True): [
+        "neck_side_stretch", "trap_stretch", "shoulder_rolls",
+    ],
+    (frozenset({"neck_shoulders"}), False): [
+        "neck_side_stretch", "trap_stretch", "shoulder_rolls",
+    ],
+    (frozenset({"legs_glutes"}), True): [
+        "lunge", "chair_squat", "calf_raise",
+    ],
+    (frozenset({"legs_glutes"}), False): [
+        "glute_squeeze", "seated_twist", "calf_raise",
+    ],
+}
+
+# Recipes are on by default; set FLOWRESET_DETERMINISTIC=0 to fall back to the
+# composer for exploratory use.
+DETERMINISTIC = os.environ.get("FLOWRESET_DETERMINISTIC", "1") not in ("0", "false", "")
+
+
+def demo_recipe(areas: list[str], can_stand: bool) -> list[str] | None:
+    """The pinned circuit for this check-in, or None to let the composer decide."""
+    if not DETERMINISTIC:
+        return None
+    return DEMO_RECIPES.get((frozenset(areas), bool(can_stand)))
 
 LIBRARY_PATH = Path(__file__).with_name("exercises.yaml")
 
@@ -119,6 +179,100 @@ def _score(move: dict[str, Any], targets: list[str]) -> float:
     return (len(targets) - min(hits)) + 0.1 * len(hits)
 
 
+def _targets_for(area: str) -> list[str]:
+    return SYMPTOM_TARGETS.get(area, SYMPTOM_TARGETS["general"])
+
+
+def normalize_areas(
+    symptom: str | None = None, symptoms: list[str] | None = None
+) -> list[str]:
+    """One or more check-in areas, deduped, order preserved, never empty.
+
+    The first entry is the primary: it is what gets logged, what the knowledge
+    card is fetched for, and what leads the composed circuit.
+    """
+    raw = list(symptoms) if symptoms else ([symptom] if symptom else [])
+    areas: list[str] = []
+    for area in raw:
+        if area and area in SYMPTOM_TARGETS and area not in areas:
+            areas.append(area)
+    return areas or ["general"]
+
+
+def _merged_targets(areas: list[str]) -> list[str]:
+    """Interleave the per-area priority lists, best-of-each first.
+
+    Round-robin rather than concatenation, so with two areas selected the
+    second area's top target still outranks the first area's third — a
+    neck+wrists check-in must not read as a neck check-in with leftovers.
+    """
+    lists = [_targets_for(area) for area in areas]
+    merged: list[str] = []
+    for rank in range(max(len(lst) for lst in lists)):
+        for lst in lists:
+            if rank < len(lst) and lst[rank] not in merged:
+                merged.append(lst[rank])
+    return merged
+
+
+def _pick_distinct(
+    candidates: list[tuple[str, dict[str, Any]]], areas: list[str], usable: int
+) -> tuple[list[tuple[str, dict[str, Any]]], int]:
+    """Choose the distinct moves of one round, rotating between the areas.
+
+    Ranking alone is not enough once several areas are selected: the top four
+    moves by merged score can all serve the first area, and the user who asked
+    for neck *and* wrists gets no wrist work. So each area takes turns picking
+    its own best remaining move. With a single area this reduces exactly to
+    taking the ranked list in order.
+    """
+    queues = {
+        area: sorted(
+            candidates,
+            key=lambda kv, a=area: (
+                -_score(kv[1], _targets_for(a)),
+                kv[1].get("seconds", 40),
+            ),
+        )
+        for area in areas
+    }
+    order = list(areas)
+    chosen: list[tuple[str, dict[str, Any]]] = []
+    taken: set[str] = set()
+    cost = 0
+    turn = 0
+    while order and len(chosen) < MAX_DISTINCT_MOVES:
+        area = order[turn % len(order)]
+        queue = queues[area]
+        pick = None
+        while queue:
+            key, move = queue.pop(0)
+            # Cost only grows, so a move that does not fit now never will.
+            if key in taken or cost + move.get("seconds", 40) > usable:
+                continue
+            pick = (key, move)
+            break
+        if pick is None:
+            order.remove(area)  # this area has nothing left that fits
+            continue
+        chosen.append(pick)
+        taken.add(pick[0])
+        cost += pick[1].get("seconds", 40)
+        turn += 1
+    return chosen, cost
+
+
+def area_label(areas: list[str]) -> str:
+    """Human label for one or more areas, kept short enough for a heading.
+
+    Three still fit; past that the heading is summarised so it cannot run away.
+    """
+    labels = [SYMPTOM_LABELS.get(a, "Reset") for a in areas]
+    if len(labels) <= 3:
+        return " + ".join(labels)
+    return f"{labels[0]} + {labels[1]} + {len(labels) - 2} more"
+
+
 def compose(
     symptom: str = "general",
     duration_min: int = 3,
@@ -126,14 +280,19 @@ def compose(
     intensity: str = "moderate",
     avoid: list[str] | None = None,
     seed: int | None = None,
+    symptoms: list[str] | None = None,
 ) -> dict[str, Any]:
     """Build a routine that fits `duration_min` under the user's constraints.
 
+    `symptoms` is the multi-select check-in: pass every area the user picked,
+    best first. `symptom` remains the single-area form and the primary area.
     `avoid` lets memory steer away from moves the user rated Worse or skipped.
     `seed` makes the demo reproducible when we want it to be.
     """
     lib = load_library()
-    targets = SYMPTOM_TARGETS.get(symptom, SYMPTOM_TARGETS["general"])
+    areas = normalize_areas(symptom, symptoms)
+    symptom = areas[0]
+    targets = _merged_targets(areas)
     avoid_set = set(avoid or [])
     rng = random.Random(seed)
 
@@ -170,16 +329,7 @@ def compose(
     # of them. A 10-minute reset is four movements done properly, not thirteen
     # different ones skimmed — repetition is what builds the mind-muscle
     # connection, and a 13-item list reads as a workout, not a desk break.
-    distinct: list[tuple[str, dict[str, Any]]] = []
-    round_cost = 0
-    for key, move in candidates:
-        if len(distinct) >= MAX_DISTINCT_MOVES:
-            break
-        cost = move.get("seconds", 40)
-        if round_cost + cost > usable:
-            continue
-        distinct.append((key, move))
-        round_cost += cost
+    distinct, round_cost = _pick_distinct(candidates, areas, usable)
 
     if not distinct:
         # Budget smaller than the cheapest move — give the single cheapest one.
@@ -214,6 +364,17 @@ def compose(
         moves.append(CLOSER)
         spent += reserve
 
+    # A pinned circuit replaces whatever was composed above, but still flows
+    # through the same labelling and payload below, so the UI, the trackers and
+    # the dashboard cannot tell the difference. Recipe first, then the blunt
+    # global override.
+    pinned = demo_recipe(areas, can_stand) or DEMO_MOVES
+    if pinned:
+        kept = [m for m in pinned if m in lib]
+        if kept:
+            moves = kept
+            spent = sum(lib[m].get("seconds", 40) for m in moves)
+
     # Label each entry with which set of that move it is, so the UI can say
     # "Bodyweight squat · set 2 of 3" instead of listing the same name twice
     # and looking like a bug.
@@ -227,8 +388,9 @@ def compose(
         sets.append({"set": seen_count[key], "of": totals[key]})
 
     return {
-        "symptom": symptom,
-        "symptom_label": SYMPTOM_LABELS.get(symptom, "Reset"),
+        "symptom": symptom,                 # primary area: what memory logs
+        "symptoms": areas,                  # (v1.3) every area checked in for
+        "symptom_label": area_label(areas),
         "duration_min": duration_min,
         "estimated_seconds": spent,
         "can_stand": can_stand,

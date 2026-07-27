@@ -11,11 +11,22 @@ stack on the box is one environment variable, not a rewrite.
 
 from __future__ import annotations
 
+import os
 import re
 import time
 from typing import Any, Callable
 
 from . import memory, persona, routines, runtime, tools
+
+# Moves we speak form corrections for. The lunge has the most thoroughly
+# calibrated detectors (split stance, knee valgus, knee-past-toes, torso lean),
+# so it is the one move we are confident enough to critique out loud. Upper-body
+# holds run silently — a wrong call on camera is worse than saying nothing.
+COACHED_MOVES: set[str] = {
+    m.strip()
+    for m in os.environ.get("FLOWRESET_COACHED_MOVES", "lunge").split(",")
+    if m.strip()
+}
 
 # The intake understands typed language, not just the four cards. This is the
 # cheap deterministic pass; the model still gets the raw sentence and can
@@ -99,6 +110,7 @@ def parse_intake(text: str, prefs: dict[str, Any]) -> dict[str, Any]:
 
     return {
         "symptom": symptom,
+        "symptoms": [symptom],
         "duration_min": duration_min,
         "can_stand": can_stand,
         "intensity": intensity,
@@ -153,6 +165,14 @@ class FlowResetAgent:
         intake = parse_intake(request, prefs)
         if override:
             intake.update(override)
+        # The check-in is multi-select, so `symptoms` is the truth and `symptom`
+        # is its primary. An override that names only one of the two (an older
+        # client, or the model calling with a single area) still lands coherent.
+        areas = routines.normalize_areas(intake.get("symptom"), intake.get("symptoms"))
+        if override and "symptom" in override and "symptoms" not in override:
+            areas = routines.normalize_areas(override["symptom"], None)
+        intake["symptoms"] = areas
+        intake["symptom"] = areas[0]
         self._emit({"kind": "intake", "parsed": intake})
 
         messages = [
@@ -167,7 +187,7 @@ class FlowResetAgent:
                 "role": "user",
                 "content": (
                     f"{request}\n\n"
-                    f"[intake parsed: area={intake['symptom']}, "
+                    f"[intake parsed: area={', '.join(intake['symptoms'])}, "
                     f"minutes={intake['duration_min']}, "
                     f"can_stand={intake['can_stand']}, "
                     f"intensity={intake['intensity']}]"
@@ -186,6 +206,7 @@ class FlowResetAgent:
         # *execute* comes from the composer, never from model prose.
         plan = tools.select_approved_routine(
             symptom=intake["symptom"],
+            symptoms=intake["symptoms"],
             duration_min=intake["duration_min"],
             can_stand=intake["can_stand"],
             intensity=intake["intensity"],
@@ -281,6 +302,15 @@ class FlowResetAgent:
 
         if kind == "debt_threshold":
             return self._watch_nudge(event, prefs)
+
+        if kind == "form_fault" and move not in COACHED_MOVES:
+            # Spoken form correction is limited to moves whose detectors we have
+            # actually calibrated. Everything else runs silently: saying nothing
+            # is safer on camera than making a confident wrong call. Framing
+            # prompts still fire for every move — that is setup help, not a
+            # judgement about the person's posture.
+            self._emit({"kind": "guardrail", "rule": "uncoached_move", "move": move})
+            return None
 
         if kind in ("form_fault", "framing_lost", "vlm_check_needed"):
             metrics = tools.analyze_pose(move)

@@ -161,7 +161,10 @@ const S = {
   // `touched` records which constraints the user actually set. Untouched chips
   // are defaults, not instructions, so they must not override what the user
   // typed — "I need to stay seated" has to beat a stale "Yes" on the chip.
-  intake: { symptom: null, duration_min: 3, can_stand: true, intensity: "moderate", touched: {} },
+  // `symptoms` is a multi-select: every area the user tapped, in the order they
+  // tapped them. The first is the primary — it leads the circuit and is what
+  // the session is logged under.
+  intake: { symptoms: [], duration_min: 3, can_stand: true, intensity: "moderate", touched: {} },
   plan: null,
   why: [],
   coachText: "",
@@ -198,6 +201,7 @@ let mock = null;
 let videoStream = null;
 let frameTimer = null;
 let planningTimer = null;
+let planningTick = null;
 let toastTimer = null;
 let currentAudio = null;
 
@@ -206,6 +210,58 @@ let currentAudio = null;
 function send(msg) {
   if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(msg));
   else if (mock) mock.send(msg);
+}
+
+// ── socket liveness ────────────────────────────────────────────────────────
+// A dropped socket used to be terminal: the camera stopped sending frames and
+// the only recovery was reloading the page. An agent turn can take ~100s, which
+// is long enough for a heartbeat to lapse, so the socket has to heal itself.
+
+let reconnectTimer = null;
+let reconnectAttempts = 0;
+
+function socketUrl() {
+  return `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`;
+}
+
+function attachSocket(sock) {
+  socket = sock;
+  S.connected = true;
+  reconnectAttempts = 0;
+  renderBadge();
+
+  sock.addEventListener("message", (e) => handle(JSON.parse(e.data)));
+  sock.addEventListener("close", () => {
+    S.connected = false;
+    renderBadge();
+    showToast("Connection to the local AI dropped — reconnecting…", "error");
+    scheduleReconnect();
+  });
+}
+
+function scheduleReconnect() {
+  if (reconnectTimer || FORCE_PREVIEW) return;
+
+  // Back off 1s, 2s, 4s… capped at 8s so it keeps trying indefinitely without
+  // hammering a server that is busy with a long local inference.
+  const delay = Math.min(1000 * 2 ** reconnectAttempts, 8000);
+  reconnectAttempts += 1;
+
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    let sock;
+    try {
+      sock = new WebSocket(socketUrl());
+    } catch {
+      scheduleReconnect();
+      return;
+    }
+    sock.addEventListener("open", () => {
+      attachSocket(sock);
+      showToast("Reconnected to the local AI on GB10.", "info");
+    }, { once: true });
+    sock.addEventListener("error", () => scheduleReconnect(), { once: true });
+  }, delay);
 }
 
 async function boot() {
@@ -232,12 +288,7 @@ async function boot() {
 
   if (opened) {
     S.connected = true;
-    socket.addEventListener("message", (e) => handle(JSON.parse(e.data)));
-    socket.addEventListener("close", () => {
-      S.connected = false;
-      renderBadge();
-      showToast("Connection to the local AI was lost. Your camera is no longer sending frames.", "error");
-    });
+    attachSocket(socket);
     const [health, prefs, dash, knowledge, routines] = await Promise.all([
       fetch("/api/health").then((r) => r.json()).catch(() => null),
       fetch("/api/prefs").then((r) => r.json()).catch(() => null),
@@ -350,6 +401,7 @@ function handle(msg) {
     case "trace":
       S.trace.push(msg.entry);
       appendTrace(msg.entry);
+      bumpPlanningWatchdog();
       break;
 
     case "audio":
@@ -662,7 +714,7 @@ function viewWelcome() {
       </div>
       <div class="grid cols-3 steps-flow">
         <div class="step"><strong>Quick check-in</strong>
-          <p class="small muted">Choose an area, available time, and seated or standing.</p></div>
+          <p class="small muted">Choose the areas that need attention, available time, and seated or standing.</p></div>
         <div class="step"><strong>Guided reset</strong>
           <p class="small muted">Review a safe setup, then follow the timer and one coaching cue.</p></div>
         <div class="step"><strong>Personal insights</strong>
@@ -885,6 +937,12 @@ function savePrefs() {
   }).then((r) => r.json()).catch(() => null);
 }
 
+function selectedAreaLabels() {
+  return S.intake.symptoms
+    .map((key) => SYMPTOM_CARDS.find((s) => s.key === key)?.label)
+    .filter(Boolean);
+}
+
 function viewHome() {
   const first = S.dashboard?.summary?.top_symptom;
   const wrap = el(`<div class="stack">
@@ -901,9 +959,10 @@ function viewHome() {
       <div class="card stack">
         <div class="flow-step">
           <span class="step-number">1</span>
-          <div><h2>Check in</h2><p class="small muted">Choose an area or describe what you feel.</p></div>
+          <div><h2>Check in</h2><p class="small muted">Choose any areas that need attention, or describe what you feel.</p></div>
         </div>
-        <div class="grid symptom-grid" id="cards"></div>
+        <div class="grid symptom-grid" id="cards" role="group" aria-label="Body areas — choose any that apply"></div>
+        <p class="tiny muted" id="areaNote" aria-live="polite"></p>
         <div class="or"><span>or describe it</span></div>
         <textarea id="req" rows="2" aria-label="Describe what you need"
           placeholder="Example: My shoulders feel tight and I need to stay seated."></textarea>
@@ -939,24 +998,40 @@ function viewHome() {
   </div>`);
 
   const updateSummary = () => {
-    const selected = SYMPTOM_CARDS.find((s) => s.key === S.intake.symptom);
+    const chosen = selectedAreaLabels();
     const summary = $("#selectionSummary", wrap);
-    if (!summary) return;
-    summary.innerHTML = `<span class="eyebrow">Your request</span>
-      <strong>${esc(selected?.label || "General desk reset")}</strong>
-      <span class="small muted">${S.intake.duration_min} min · ${S.intake.can_stand ? "Seated or standing" : "Seated only"}</span>`;
+    if (summary) {
+      summary.innerHTML = `<span class="eyebrow">Your request</span>
+        <strong>${esc(chosen.join(" + ") || "General desk reset")}</strong>
+        <span class="small muted">${S.intake.duration_min} min · ${S.intake.can_stand ? "Seated or standing" : "Seated only"}</span>`;
+    }
+    // Time is the real constraint on how many areas one reset can serve: a
+    // reset is at most four distinct movements, and a short one is fewer. Say
+    // so before the plan is built rather than quietly under-serving an area.
+    const note = $("#areaNote", wrap);
+    if (note) {
+      const room = S.intake.duration_min <= 1 ? 2 : S.intake.duration_min <= 2 ? 3 : 4;
+      note.textContent = chosen.length > room
+        ? `${chosen.length} areas in ${S.intake.duration_min} min covers the first ${room} best — add time, or pick fewer.`
+        : chosen.length > 1
+          ? `The reset alternates between your ${chosen.length} areas, ${chosen[0].toLowerCase()} first.`
+          : "";
+    }
   };
 
   SYMPTOM_CARDS.forEach((s) => {
-    const b = el(`<button class="symptom" type="button" aria-pressed="${S.intake.symptom === s.key}">
+    const b = el(`<button class="symptom" type="button" aria-pressed="${S.intake.symptoms.includes(s.key)}">
       <span class="glyph">${s.glyph}</span><strong>${esc(s.label)}</strong>
       <span class="small muted">${esc(s.hint)}</span>
       <span class="selected-check" aria-hidden="true">✓</span></button>`);
     b.addEventListener("click", () => {
-      S.intake.symptom = s.key;
+      // Multi-select: tap adds, tap again removes. Order is kept — the first
+      // area picked leads the circuit and is what the session is logged under.
+      const at = S.intake.symptoms.indexOf(s.key);
+      if (at >= 0) S.intake.symptoms.splice(at, 1);
+      else S.intake.symptoms.push(s.key);
       S.intake.touched.symptom = true;
-      [...$("#cards", wrap).children].forEach((c) => c.setAttribute("aria-pressed", "false"));
-      b.setAttribute("aria-pressed", "true");
+      b.setAttribute("aria-pressed", String(S.intake.symptoms.includes(s.key)));
       updateSummary();
     });
     $("#cards", wrap).append(b);
@@ -988,9 +1063,12 @@ function viewHome() {
 
   const ask = () => {
     const text = $("#req", wrap).value.trim();
-    const selected = SYMPTOM_CARDS.find((s) => s.key === S.intake.symptom);
-    const fallback = selected
-      ? `My ${selected.label.toLowerCase()} need a reset. I have ${S.intake.duration_min} minutes and ${S.intake.can_stand ? "can stand" : "need to stay seated"}.`
+    const chosen = selectedAreaLabels().map((l) => l.toLowerCase());
+    const areas = chosen.length > 1
+      ? `${chosen.slice(0, -1).join(", ")} and ${chosen[chosen.length - 1]}`
+      : chosen[0];
+    const fallback = areas
+      ? `My ${areas} need a reset. I have ${S.intake.duration_min} minutes and ${S.intake.can_stand ? "can stand" : "need to stay seated"}.`
       : `I need a ${S.intake.duration_min} minute desk reset.`;
     requestPlan(text || fallback);
   };
@@ -1021,23 +1099,66 @@ function requestPlan(text) {
   const cancel = $("#cancelPlan");
   if (cancel) cancel.hidden = false;
   const override = {};
-  if (S.intake.touched.symptom && S.intake.symptom) override.symptom = S.intake.symptom;
+  if (S.intake.touched.symptom && S.intake.symptoms.length) {
+    override.symptoms = [...S.intake.symptoms];
+    override.symptom = S.intake.symptoms[0];   // primary, and what older clients read
+  }
   if (S.intake.touched.duration) override.duration_min = S.intake.duration_min;
   if (S.intake.touched.stand) override.can_stand = S.intake.can_stand;
 
   send({ type: "intake", text, override: Object.keys(override).length ? override : undefined });
   clearPlanningTimer();
+  startPlanningWatchdog();
+}
+
+// One agent turn on the box costs ~50-100s: OpenClaw's own scaffolding is
+// ~18k tokens before our prompt even lands. The old 20s ceiling killed a
+// perfectly healthy request a third of the way in and blamed the model for it.
+// The server has its own ceiling (FLOWRESET_OPENCLAW_TIMEOUT, 240s) and reports
+// failure over the socket, so this is only a backstop for a socket that died
+// without ever reporting — it must sit *past* the server's ceiling, not before.
+const PLAN_TIMEOUT_MS = 270000;
+
+function startPlanningWatchdog() {
+  const startedAt = Date.now();
+
+  // A turn is silent while OpenClaw works, so show elapsed time — otherwise a
+  // 90s wait is indistinguishable from a hang.
+  planningTick = setInterval(() => {
+    if (!S.planning) return clearPlanningTimer();
+    const secs = Math.round((Date.now() - startedAt) / 1000);
+    const hint = $("#hint");
+    if (hint) hint.textContent = `Thinking on the box… ${secs}s (a full plan usually takes a minute or two)`;
+  }, 1000);
+
   planningTimer = setTimeout(() => {
     if (!S.planning || S.screen !== "home") return;
     S.planning = false;
+    clearPlanningTimer();
     restorePlanControls();
-    showToast("The local AI is taking longer than expected. Check that the model is running, then try again.", "error");
-  }, 20000);
+    showToast("The local AI never answered. Check that Ollama is running and the model is loaded, then try again.", "error");
+  }, PLAN_TIMEOUT_MS);
+}
+
+// Any inbound trace step proves the turn is alive, so push the backstop out
+// rather than letting a long-but-progressing turn trip it.
+function bumpPlanningWatchdog() {
+  if (!S.planning || !planningTimer) return;
+  clearTimeout(planningTimer);
+  planningTimer = setTimeout(() => {
+    if (!S.planning || S.screen !== "home") return;
+    S.planning = false;
+    clearPlanningTimer();
+    restorePlanControls();
+    showToast("The local AI stalled mid-plan. Check that Ollama is running, then try again.", "error");
+  }, PLAN_TIMEOUT_MS);
 }
 
 function clearPlanningTimer() {
   if (planningTimer) clearTimeout(planningTimer);
+  if (planningTick) clearInterval(planningTick);
   planningTimer = null;
+  planningTick = null;
 }
 
 function restorePlanControls() {
@@ -1062,7 +1183,7 @@ function viewPlan() {
       <span class="pill">${p.moves.length} moves</span></div>
 
     <div class="card stack">
-      <h1>${esc(p.symptom_label)} reset</h1>
+      <h1>${esc(p.symptom_label)}${p.symptoms?.length > 1 ? "" : " reset"}</h1>
       <p class="hero-lede">Your plan is ready. Review the sequence, choose how your coach
         communicates, then decide whether to add private camera feedback.</p>
 
@@ -1163,7 +1284,8 @@ async function beginSession(withCamera) {
   S.videoStatus = null;
   S.conversation = [];
   S.voiceState = S.prefs.voice ? "ready" : "off";
-  send({ type: "start_reset", camera, symptom: S.plan.symptom, duration_min: S.plan.duration_min, can_stand: S.intake.can_stand });
+  send({ type: "start_reset", camera, symptom: S.plan.symptom, symptoms: S.plan.symptoms,
+    duration_min: S.plan.duration_min, can_stand: S.intake.can_stand });
   S.screen = "session";
   render();
   // Only now does <video id="cam"> exist. Without this the stream is live but
@@ -2032,7 +2154,7 @@ function viewDashboard() {
   $("#split", wrap).append(charts.responseSplit(s.responses));
   $("#areas", wrap).append(charts.areaBars(s.by_symptom, labels));
   $("#recommendedReset", wrap).addEventListener("click", () => {
-    S.intake.symptom = topSymptom;
+    S.intake.symptoms = [topSymptom];
     S.intake.duration_min = recommendedMinutes;
     S.intake.touched.symptom = true;
     S.intake.touched.duration = true;
@@ -2427,7 +2549,7 @@ function viewKnowledge() {
     button.addEventListener("click", () => setArea(button.dataset.libraryFilter, true)));
   wrap.querySelectorAll("[data-library-start]").forEach((button) =>
     button.addEventListener("click", () => {
-      S.intake.symptom = button.dataset.libraryStart;
+      S.intake.symptoms = [button.dataset.libraryStart];
       S.intake.touched.symptom = true;
       go("home");
     }));
@@ -2474,7 +2596,7 @@ function viewKnowledge() {
   });
   $("#demoReset", wrap).addEventListener("click", () => {
     if (!demoMove) return;
-    S.intake.symptom = demoMove.area;
+    S.intake.symptoms = [demoMove.area];
     S.intake.touched.symptom = true;
     dialog.close();
     go("home");
@@ -2500,7 +2622,7 @@ function viewHelp() {
       <section class="card stack-sm">
         <h2>Take a reset</h2>
         <ol class="help-steps">
-          <li>Choose the area that needs attention.</li>
+          <li>Choose the areas that need attention — one or several.</li>
           <li>Confirm your time and whether you can stand.</li>
           <li>Review the plan, then start with or without camera guidance.</li>
           <li>Finish with Better, Same, or Worse so the next plan adapts.</li>

@@ -159,23 +159,161 @@ def _run_nemoclaw(messages, tool_schemas, on_step=None):
     return agent.run(messages, on_step=on_step)
 
 
-def _run_openclaw(messages, tool_schemas, on_step=None):
+OPENCLAW_BIN = os.environ.get("FLOWRESET_OPENCLAW_BIN", "openclaw")
+OPENCLAW_AGENT = os.environ.get("FLOWRESET_OPENCLAW_AGENT", "flowreset")
+OPENCLAW_TIMEOUT = int(os.environ.get("FLOWRESET_OPENCLAW_TIMEOUT", "240"))
+
+
+def _extract_json(blob: str) -> dict[str, Any]:
+    """Pull the result object out of OpenClaw's stdout.
+
+    The CLI interleaves log lines with the JSON payload, so we scan for the
+    last balanced top-level object rather than trusting the whole stream.
+    """
+    depth = 0
+    start = -1
+    best = None
+    in_str = False
+    escape = False
+
+    for i, ch in enumerate(blob):
+        if in_str:
+            if escape:
+                escape = False
+            elif ch == "\\":
+                escape = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch == "{":
+            if depth == 0:
+                start = i
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0 and start >= 0:
+                candidate = blob[start:i + 1]
+                if len(candidate) > len(best or ""):
+                    best = candidate
+
+    if not best:
+        return {}
     try:
-        import openclaw  # type: ignore
-    except ImportError as exc:  # pragma: no cover - depends on event image
+        return json.loads(best)
+    except json.JSONDecodeError:
+        return {}
+
+
+def _walk_tool_calls(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    """Read the tools OpenClaw actually invoked.
+
+    They arrive under meta.toolSummary.tools, namespaced by MCP server as
+    `flowreset__<tool>`; strip the prefix so the UI trace shows our own names.
+    """
+    meta = payload.get("meta") or {}
+    names = ((meta.get("toolSummary") or {}).get("tools")) or []
+
+    calls = []
+    for raw in names:
+        name = raw.split("__")[-1] if isinstance(raw, str) else ""
+        if name in tools.REGISTRY:
+            calls.append({"name": name, "arguments": {}, "result": None})
+    return calls
+
+
+def _run_openclaw(messages, tool_schemas, on_step=None):
+    """Drive OpenClaw's CLI as a subprocess.
+
+    OpenClaw ships as a Node CLI, not a Python package — `import openclaw` can
+    never succeed. The tools reach it over MCP instead (see agent/mcp_server.py),
+    registered once with:
+
+        openclaw mcp add flowreset --command <venv python> \
+            --arg -m --arg agent.mcp_server --cwd <repo root>
+
+    Note the latency: a turn costs ~50-75s, dominated by ~18k tokens of
+    OpenClaw's own scaffolding plus node start-up. Call this once per session,
+    off the interactive path — never inside the movement loop.
+    """
+    import subprocess
+    import uuid
+
+    prompt = ""
+    for msg in reversed(messages):
+        if msg.get("role") == "user" and msg.get("content"):
+            prompt = msg["content"]
+            break
+    if not prompt:
+        raise RuntimeError("openclaw runtime: no user message to send")
+
+    cmd = [
+        OPENCLAW_BIN, "agent", "--local",
+        "--agent", OPENCLAW_AGENT,
+        "--session-key", f"flowreset-{uuid.uuid4().hex[:12]}",
+        "--message", prompt,
+        "--json",
+    ]
+
+    try:
+        proc = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=OPENCLAW_TIMEOUT,
+        )
+    except FileNotFoundError as exc:
         raise RuntimeError(
-            "FLOWRESET_RUNTIME=openclaw but openclaw is not importable. "
-            "See _run_nemoclaw for the same wiring note; run native meanwhile."
+            f"FLOWRESET_RUNTIME=openclaw but {OPENCLAW_BIN!r} is not on PATH. "
+            "Install the CLI (npm i -g openclaw) or set FLOWRESET_OPENCLAW_BIN. "
+            "Run with FLOWRESET_RUNTIME=native meanwhile — same tools, same UI."
+        ) from exc
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(
+            f"openclaw agent turn exceeded {OPENCLAW_TIMEOUT}s"
         ) from exc
 
-    # TODO(box): same two lines as above, against OpenClaw's constructor.
-    agent = openclaw.Agent(  # type: ignore[attr-defined]
-        model=llm.REASON_MODEL,
-        base_url=llm.OLLAMA_HOST,
-        tools=tool_schemas,
-        tool_impl=tools.REGISTRY,
+    payload = _extract_json(proc.stdout)
+    meta = payload.get("meta") or {}
+    payloads = payload.get("payloads") or []
+
+    # The reply lives at meta.finalAssistantVisibleText, with payloads[0].text
+    # carrying the same string — not at the top level.
+    content = (
+        meta.get("finalAssistantVisibleText")
+        or meta.get("finalAssistantRawText")
+        or (payloads[0].get("text") if payloads else "")
+        or ""
     )
-    return agent.run(messages, on_step=on_step)
+
+    if not content:
+        raise RuntimeError(
+            "openclaw returned no assistant text "
+            f"(exit {proc.returncode}): {proc.stderr.strip()[:300]}"
+        )
+
+    calls = _walk_tool_calls(payload)
+
+    if on_step:
+        for call in calls:
+            on_step({
+                "kind": "tool",
+                "step": 0,
+                "name": call["name"],
+                "arguments": call["arguments"],
+                "result": call["result"],
+            })
+
+        trace = meta.get("executionTrace") or {}
+        on_step({
+            "kind": "model",
+            "step": len(calls),
+            "content": content,
+            "tool_calls": [c["name"] for c in calls],
+            "model": trace.get("winnerModel"),
+            "runtime": "openclaw",
+            "duration_ms": meta.get("durationMs"),
+        })
+
+    return {"role": "assistant", "content": content, "tool_calls": []}
 
 
 _RUNTIMES: dict[str, Callable[..., dict[str, Any]]] = {

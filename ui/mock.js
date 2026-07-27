@@ -94,6 +94,13 @@ const LABELS = {
   general: "General reset",
 };
 
+// Mirrors agent/routines.py::area_label — short enough to sit in a heading.
+function areaLabel(areas) {
+  const labels = areas.map((a) => LABELS[a] || "Reset");
+  if (labels.length <= 3) return labels.join(" + ");
+  return `${labels[0]} + ${labels[1]} + ${labels.length - 2} more`;
+}
+
 const SOURCE_OSHA = {
   organization: "U.S. Occupational Safety and Health Administration",
   title: "Computer Workstations: Hazards and Solutions",
@@ -246,14 +253,28 @@ export class MockBackend {
     if (/can stand|could stand|able to stand|can get up|happy to stand|standing is fine|standing's fine|on my feet|don'?t mind standing/.test(lower)) canStand = true;
     else if (/stay seated|seated only|remain seated|stay in my (chair|seat)|stay at my desk|can'?t stand|cannot stand|can'?t get up|need to sit|have to sit|without standing|on a call|in a meeting|at my desk/.test(lower)) canStand = false;
 
-    if (override?.symptom) symptom = override.symptom;
+    // The check-in is multi-select; `symptom` stays the primary area.
+    let areas = [symptom];
+    if (override?.symptoms?.length) areas = override.symptoms;
+    else if (override?.symptom) areas = [override.symptom];
+    areas = areas.filter((a, i) => BY_SYMPTOM[a] && areas.indexOf(a) === i);
+    if (!areas.length) areas = ["general"];
+    symptom = areas[0];
     if (override?.duration_min) duration = override.duration_min;
     if (override?.can_stand !== undefined) canStand = override.can_stand;
 
-    this._trace({ kind: "intake", parsed: { symptom, duration_min: duration, can_stand: canStand } });
+    this._trace({ kind: "intake", parsed: { symptom, symptoms: areas, duration_min: duration, can_stand: canStand } });
 
     const budget = duration * 60;
-    const pool = BY_SYMPTOM[symptom].filter((k) => canStand || !STANDING_ONLY.includes(k));
+    // Mirrors agent/routines.py::_pick_distinct — each area takes turns, so a
+    // two-area check-in never spends the whole budget on the first one.
+    const queues = areas.map((a) => BY_SYMPTOM[a].filter((k) => canStand || !STANDING_ONLY.includes(k)));
+    const pool = [];
+    for (let rank = 0; queues.some((q) => rank < q.length); rank += 1) {
+      queues.forEach((q) => {
+        if (rank < q.length && !pool.includes(q[rank])) pool.push(q[rank]);
+      });
+    }
     const moves = [];
     let spent = 0;
     const reserve = duration >= 2 ? MOVES.box_breath.seconds : 0;
@@ -270,13 +291,14 @@ export class MockBackend {
     setTimeout(() => this._trace({ kind: "model", step: 1, content: "", tool_calls: ["get_reset_history"], latency_ms: 180, model: "qwen3:8b" }), 340);
     setTimeout(() => this._trace({ kind: "tool", name: "get_reset_history", arguments: { days: 7 }, result: this._summary() }), 430);
     setTimeout(() => this._trace({ kind: "model", step: 2, content: "", tool_calls: ["select_approved_routine"], latency_ms: 240, model: "qwen3:8b" }), 560);
-    setTimeout(() => this._trace({ kind: "tool", name: "select_approved_routine", arguments: { symptom, duration_min: duration, can_stand: canStand }, result: { moves } }), 660);
+    setTimeout(() => this._trace({ kind: "tool", name: "select_approved_routine", arguments: { symptom, symptoms: areas, duration_min: duration, can_stand: canStand }, result: { moves } }), 660);
 
     const s = this._summary();
     const count = s.by_symptom[symptom] || 0;
     const plan = {
       symptom,
-      symptom_label: LABELS[symptom],
+      symptoms: areas,
+      symptom_label: areaLabel(areas),
       duration_min: duration,
       estimated_seconds: spent,
       moves,
@@ -292,7 +314,7 @@ export class MockBackend {
     this.liveSessionId = 9000 + this.sessions.length;
 
     const why = [
-      `You said ${LABELS[symptom].toLowerCase()}, ${canStand ? "standing is fine" : "seated only"}, ${duration} min.`,
+      `You said ${areaLabel(areas).toLowerCase()}, ${canStand ? "standing is fine" : "seated only"}, ${duration} min.`,
       `${moves.length} moves from the approved library, about ${spent}s total.`,
     ];
     if (count > 1) why.push(`This is your ${["first", "second", "third", "fourth", "fifth"][Math.min(count, 4)]} ${LABELS[symptom].toLowerCase()} check-in in 7 days.`);
@@ -301,7 +323,7 @@ export class MockBackend {
       this._trace({ kind: "action", action: "session_created", session_id: this.liveSessionId, moves });
       this._emit({
         type: "coach",
-        text: `Here's a ${duration}-minute ${canStand ? "" : "seated "}reset for your ${LABELS[symptom].toLowerCase()}: ${plan.move_names.slice(0, 3).join(", ")}. Start when you're ready.`,
+        text: `Here's a ${duration}-minute ${canStand ? "" : "seated "}reset for your ${areaLabel(areas).toLowerCase()}: ${plan.move_names.slice(0, 3).join(", ")}. Start when you're ready.`,
         speak: this.prefs.voice,
         routine: { duration_min: duration, moves },
         plan,

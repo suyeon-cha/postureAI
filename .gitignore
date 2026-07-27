@@ -20,3 +20,14 @@ flowreset.db
 
 # env
 .env
+
+# TLS material for the local HTTPS server — key.pem is a private key and this
+# repo is public. Regenerate locally with scripts, never commit.
+certs/
+
+# Piper voice + its config come from the drive like the other weights.
+voices/
+
+# Local-only: editor settings and a pre-github snapshot of earlier work.
+.claude/
+_local_backup_*/

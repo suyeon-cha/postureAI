@@ -338,6 +338,7 @@ async def _handle_ui_message(msg: dict[str, Any]) -> None:
         if plan is None:
             plan = tools.select_approved_routine(
                 symptom=msg.get("symptom", "general"),
+                symptoms=msg.get("symptoms"),
                 duration_min=int(msg.get("duration_min", 3)),
                 can_stand=bool(msg.get("can_stand", True)),
             )
