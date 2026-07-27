@@ -477,7 +477,52 @@ export class MockBackend {
       summary: this._summary(),
       daily,
       recent: [...this.sessions].reverse().slice(0, 8),
+      practice: this._practice(),
       symptom_labels: LABELS,
+    };
+  }
+
+  /** Mirrors memory.practice(): time-of-day buckets and per-move history. */
+  _practice() {
+    const DAYPARTS = [
+      { key: "early", label: "Before 10am", start: 0, end: 10 },
+      { key: "midday", label: "10am – 1pm", start: 10, end: 13 },
+      { key: "afternoon", label: "1pm – 4pm", start: 13, end: 16 },
+      { key: "late", label: "After 4pm", start: 16, end: 24 },
+    ];
+    const buckets = DAYPARTS.map((p) => ({ ...p, sessions: 0, by_symptom: {} }));
+    const moves = {};
+    this.sessions.forEach((s) => {
+      const hour = new Date(s.started_at).getHours();
+      const b = buckets.find((x) => hour >= x.start && hour < x.end);
+      if (b) {
+        b.sessions += 1;
+        b.by_symptom[s.symptom] = (b.by_symptom[s.symptom] || 0) + 1;
+      }
+      (s.moves || []).forEach((m) => {
+        const e = (moves[m] = moves[m] || { practiced: 0, better: 0, rated: 0 });
+        e.practiced += 1;
+        if (s.completed && s.response) {
+          e.rated += 1;
+          if (s.response === "better") e.better += 1;
+        }
+      });
+    });
+    const busiest = [...buckets].sort((a, b) => b.sessions - a.sessions)[0];
+    return {
+      days: 30,
+      dayparts: buckets.map(({ key, label, sessions, by_symptom }) =>
+        ({ key, label, sessions, by_symptom })),
+      busiest_daypart: busiest && busiest.sessions
+        ? {
+            label: busiest.label,
+            sessions: busiest.sessions,
+            top_symptom: Object.keys(busiest.by_symptom)
+              .sort((a, b) => busiest.by_symptom[b] - busiest.by_symptom[a])[0] || null,
+          }
+        : null,
+      moves,
+      distinct_moves: Object.keys(moves).length,
     };
   }
 

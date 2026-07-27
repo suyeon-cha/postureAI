@@ -142,6 +142,11 @@ const S = {
   connected: false,
   preview: false,
   health: null,
+  // Deep links from My insights into Learn, consumed once on arrival so the
+  // user lands on the area or movement they clicked rather than the top of a
+  // 26-item catalog.
+  learnArea: null,
+  learnMove: null,
   prefs: {
     goal: "reduce_stiffness",
     common_areas: ["neck_shoulders"],
@@ -536,8 +541,19 @@ async function loadDashboard() {
 }
 
 async function loadKnowledge() {
-  if (mock) { S.knowledge = mock.knowledge(); render(); return; }
-  S.knowledge = await fetch("/api/knowledge").then((r) => r.json()).catch(() => null);
+  if (mock) {
+    S.knowledge = mock.knowledge();
+    if (!S.dashboard) S.dashboard = mock.dashboard();
+    render();
+    return;
+  }
+  // The library shows practice history per movement, which lives on the
+  // dashboard payload — fetch it too if the user came straight here.
+  const [kb] = await Promise.all([
+    fetch("/api/knowledge").then((r) => r.json()).catch(() => null),
+    S.dashboard ? Promise.resolve() : loadDashboard(),
+  ]);
+  S.knowledge = kb;
   render();
 }
 
@@ -1765,22 +1781,81 @@ function viewDashboard() {
       ? "You have started the habit. Add one reset before a predictable daily work block."
       : "Complete one reset to establish your personal baseline.";
 
+  // ── the headline insight ──
+  // Whoop/Oura pattern: one causal sentence a person can act on, not a wall of
+  // counts. "Your neck goes after 4pm" changes behaviour; "neck: 6" does not.
+  const pr = d.practice || {};
+  const busiest = pr.busiest_daypart;
+  const practiced = pr.moves || {};
+  const distinctPractised = pr.distinct_moves || 0;
+  const totalMoves = Object.keys(S.routines?.moves || {}).length || 26;
+
+  // Which single movement has the best strike rate, with enough rating behind
+  // it to mean anything. Two ratings is a low bar, but it is honest about
+  // being early rather than silently pretending to a trend.
+  const rankedMoves = Object.entries(practiced)
+    .filter(([, m]) => m.rated >= 2)
+    .map(([k, m]) => ({ key: k, ...m, rate: m.better / m.rated }))
+    .sort((a, b) => b.rate - a.rate || b.rated - a.rated);
+  const bestMove = rankedMoves[0];
+
+  const headline = busiest && busiest.sessions
+    ? `Most of your resets happen ${busiest.label.toLowerCase()}`
+    : `${topLabel} is your current focus`;
+  const headlineWhy = busiest && busiest.sessions
+    ? `${busiest.sessions} of your last ${pr.days || 30} days' sessions started then${
+        busiest.top_symptom ? `, most often for ${esc(labels[busiest.top_symptom] || busiest.top_symptom).toLowerCase()}` : ""
+      }. Getting ahead of it with one reset before that block tends to work better than reacting after.`
+    : nextSteps[topSymptom] || nextSteps.general;
+
   const wrap = el(`<div class="stack">
-    <div class="stack-sm"><span class="eyebrow">Private to you</span><h1>My insights</h1>
-      <p class="muted">Your session history is analyzed locally on this machine—never compared
-        with coworkers and never shown here as a team score.</p></div>
+    <div class="insights-head">
+      <div class="stack-sm"><span class="eyebrow">Private to you</span><h1>My insights</h1>
+        <p class="muted">Analyzed locally on this machine — never compared with coworkers,
+          never shown as a team score.</p></div>
+      <div class="insights-topline">
+        <div><strong>${s.sessions_completed}</strong><span>completed · 7d</span></div>
+        <div><strong>${s.streak_days}</strong><span>day streak</span></div>
+        <div><strong>${Math.round((s.better_rate || 0) * 100)}%</strong><span>felt better</span></div>
+      </div>
+    </div>
 
     <section class="card insight-hero" aria-labelledby="next-step-title">
       <div class="stack-sm">
-        <span class="eyebrow">Your next best step</span>
-        <h2 id="next-step-title">${esc(topLabel)} is your current focus</h2>
-        <p class="hero-lede">${esc(nextSteps[topSymptom] || nextSteps.general)}</p>
+        <span class="eyebrow">The pattern worth knowing</span>
+        <h2 id="next-step-title">${esc(headline)}</h2>
+        <p class="hero-lede">${headlineWhy}</p>
+        <div class="daypart-strip" role="img"
+          aria-label="Sessions by time of day over the last ${pr.days || 30} days">
+          ${(pr.dayparts || []).map((part) => {
+            const max = Math.max(...(pr.dayparts || []).map((x) => x.sessions), 1);
+            const pct = Math.round((part.sessions / max) * 100);
+            const peak = busiest && part.label === busiest.label && part.sessions > 0;
+            return `<div class="daypart" data-peak="${peak}">
+              <div class="daypart-bar"><span style="height:${Math.max(pct, 4)}%"></span></div>
+              <span class="daypart-label">${esc(part.label)}</span>
+              <span class="daypart-count">${part.sessions}</span>
+            </div>`;
+          }).join("")}
+        </div>
       </div>
       <div class="stack-sm insight-action">
-        <span class="pill info">Based on your last 7 days</span>
+        <span class="pill info">${esc(topLabel)} · most requested</span>
         <button class="btn" id="recommendedReset">Start recommended reset</button>
+        <button class="btn subtle" id="insightsToLearn">Learn about ${esc(topLabel.toLowerCase())}</button>
+        <p class="tiny muted">${esc(nextSteps[topSymptom] || nextSteps.general)}</p>
       </div>
     </section>
+
+    ${bestMove ? `<section class="card best-move">
+      <div class="stack-sm">
+        <span class="eyebrow">What's working for you</span>
+        <h2>${esc(S.routines?.moves?.[bestMove.key]?.name || bestMove.key.replace(/_/g, " "))}</h2>
+        <p class="small muted">You rated <strong>${bestMove.better} of ${bestMove.rated}</strong>
+          resets containing this movement as “better” — your strongest response so far.</p>
+      </div>
+      <button class="btn subtle" data-learn-move="${esc(bestMove.key)}">See the guide</button>
+    </section>` : ""}
 
     <div class="insight-grid">
       <section class="card insight-card stack">
@@ -1813,15 +1888,30 @@ function viewDashboard() {
       </section>
     </div>
 
-    <details class="card history-card">
-      <summary><span><strong>Recent session history</strong>
-        <small>Review the details behind your insights</small></span>
-        <span class="pill">Last ${Math.min((d.recent || []).length, 5)}</span></summary>
-      <div class="table-scroll"><table>
-        <thead><tr><th>When</th><th>Area</th><th>Length</th><th>Routine</th><th>Result</th></tr></thead>
-        <tbody id="rows"></tbody>
-      </table></div>
-    </details>
+    <div class="insight-lower">
+      <section class="card stack" aria-labelledby="historyTitle">
+        <div class="insight-card-head">
+          <div class="stack-sm"><span class="eyebrow">History</span>
+            <h2 id="historyTitle">Recent sessions</h2></div>
+          <span class="pill">Last ${Math.min((d.recent || []).length, 6)}</span>
+        </div>
+        <ol class="session-timeline" id="rows"></ol>
+      </section>
+
+      <section class="card stack" aria-labelledby="coverageTitle">
+        <div class="stack-sm"><span class="eyebrow">Your library</span>
+          <h2 id="coverageTitle">Movements you've practised</h2>
+          <p class="small muted">Out of ${totalMoves} approved movements. Breadth matters
+            less than repetition — but a movement you've never tried can't help you yet.</p></div>
+        <div class="coverage-meter" role="img"
+          aria-label="${distinctPractised} of ${totalMoves} movements practised">
+          <span style="width:${Math.round((distinctPractised / totalMoves) * 100)}%"></span>
+        </div>
+        <p class="coverage-count"><strong>${distinctPractised}</strong> practised ·
+          <span class="muted">${Math.max(totalMoves - distinctPractised, 0)} still new to you</span></p>
+        <button class="btn subtle" id="coverageToLearn">Browse the full library</button>
+      </section>
+    </div>
   </div>`);
 
   $("#bars", wrap).append(charts.dayBars(d.daily));
@@ -1835,23 +1925,40 @@ function viewDashboard() {
     go("home");
   });
 
+  $("#insightsToLearn", wrap)?.addEventListener("click", () => {
+    S.learnArea = topSymptom;
+    go("knowledge");
+  });
+  $("#coverageToLearn", wrap)?.addEventListener("click", () => go("knowledge"));
+  wrap.querySelectorAll("[data-learn-move]").forEach((b) =>
+    b.addEventListener("click", () => {
+      S.learnMove = b.dataset.learnMove;
+      go("knowledge");
+    }));
+
   const tbody = $("#rows", wrap);
-  (d.recent || []).slice(0, 5).forEach((r) => {
+  (d.recent || []).slice(0, 6).forEach((r) => {
     const when = new Date(r.started_at);
     const badge = r.response
       ? `<span class="pill ${r.response === "better" ? "good" : r.response === "worse" ? "warn" : ""}">${r.response}</span>`
       : `<span class="pill">not finished</span>`;
-    tbody.append(el(`<tr data-live="${!r.is_demo}">
-      <td>${when.toLocaleDateString(undefined, { month: "short", day: "numeric" })}
-        <span class="muted tiny">${when.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}</span></td>
-      <td>${esc(labels[r.symptom] || r.symptom)}</td>
-      <td>${r.duration_min} min</td>
-      <td class="small muted">${esc((r.moves || []).map((m) => m.replace(/_/g, " ")).join(", "))}</td>
-      <td>${badge} ${r.is_demo ? "" : '<span class="pill info">this session</span>'}</td>
-    </tr>`));
+    tbody.append(el(`<li class="session-row" data-live="${!r.is_demo}">
+      <div class="session-when">
+        <strong>${when.toLocaleDateString(undefined, { month: "short", day: "numeric" })}</strong>
+        <span class="muted tiny">${when.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}</span>
+      </div>
+      <div class="session-body">
+        <div class="row"><strong>${esc(labels[r.symptom] || r.symptom)}</strong>
+          <span class="tiny muted">${r.duration_min} min</span>
+          ${badge} ${r.is_demo ? "" : '<span class="pill info">this session</span>'}</div>
+        <p class="tiny muted">${esc((r.moves || []).map((m) =>
+          S.routines?.moves?.[m]?.name || m.replace(/_/g, " ")).join(" · "))}</p>
+      </div>
+    </li>`));
   });
   return wrap;
 }
+
 
 const LIBRARY_AREAS = [
   "neck_shoulders",
@@ -1905,6 +2012,21 @@ function viewKnowledge() {
     topics.some((topic) => topic.area === area) || moves.some((move) => move.area === area)
   );
 
+  // Practice history turns a flat catalog into a personal one: a movement you
+  // have done twelve times and one you have never tried should not look
+  // identical. Comes from /api/dashboard, which the nav preloads.
+  const practiced = S.dashboard?.practice?.moves || {};
+  const practisedCount = Object.keys(practiced).length;
+  const newCount = Math.max(moves.length - practisedCount, 0);
+  // Skip the closer: it is appended to every routine, so it always wins on
+  // raw count and would be a meaningless thing to suggest revisiting.
+  const mostPractised = Object.entries(practiced)
+    .filter(([k]) => k !== "box_breath")
+    .sort((a, b) => b[1].practiced - a[1].practiced)[0];
+  const continueMove = mostPractised
+    ? moves.find((m) => m.key === mostPractised[0])
+    : null;
+
   const wrap = el(`<div class="stack">
     <div class="library-hero card">
       <div class="stack-sm">
@@ -1918,8 +2040,18 @@ function viewKnowledge() {
           local coach.</p>
         <div class="row">
           <button class="btn" id="libraryReset">Start a reset</button>
+          ${continueMove ? `<button class="btn secondary" data-demo-move="${esc(continueMove.key)}">
+            Revisit ${esc(continueMove.name)}</button>` : ""}
           <span class="tiny muted">Reviewed ${esc(kb.reviewed_at)} · Version ${esc(kb.version)}</span>
         </div>
+        ${practisedCount ? `<div class="learn-progress">
+          <div class="learn-progress-bar">
+            <span style="width:${Math.round((practisedCount / moves.length) * 100)}%"></span>
+          </div>
+          <p class="tiny muted"><strong>${practisedCount} of ${moves.length}</strong> practised ·
+            ${newCount} still new to you</p>
+        </div>` : `<p class="tiny muted">Complete a reset and this library starts tracking
+          which movements you've practised.</p>`}
       </div>
       <div class="library-boundary">
         <span class="eyebrow">Use this library for</span>
@@ -1982,16 +2114,24 @@ function viewKnowledge() {
       </div>
       <div class="library-filters" id="libraryFilters" aria-label="Filter exercise guides">
         <button class="chip" data-area="all" aria-pressed="true">All</button>
-        ${areas.map((area) => `<button class="chip" data-area="${esc(area)}" aria-pressed="false">
-          ${esc(labels[area] || area.replace(/_/g, " "))}</button>`).join("")}
+        ${areas.map((area) => {
+          const n = moves.filter((m) => m.area === area).length;
+          return `<button class="chip" data-area="${esc(area)}" aria-pressed="false">
+            ${esc(labels[area] || area.replace(/_/g, " "))} <span class="chip-count">${n}</span></button>`;
+        }).join("")}
+        <button class="chip" data-area="new" aria-pressed="false">New to you
+          <span class="chip-count">${newCount}</span></button>
       </div>
       <p class="small muted" id="libraryCount" aria-live="polite">${moves.length} exercises</p>
       <div class="exercise-library-grid" id="exerciseCards">
         ${moves.map((move) => {
           const search = [move.name, move.area, ...(move.targets || []), move.cues?.setup, move.cues?.during]
             .filter(Boolean).join(" ").toLowerCase();
+          const hist = practiced[move.key];
+          const mus = move.muscles || {};
           return `<article class="card exercise-guide-card stack-sm"
-            data-area="${esc(move.area)}" data-search="${esc(search)}">
+            data-area="${esc(move.area)}" data-search="${esc(search)}"
+            data-practised="${hist ? "yes" : "no"}">
             <div class="exercise-guide-head">
               <span class="library-icon">${libraryIcon(move.area)}</span>
               <div><h3>${esc(move.name || move.key.replace(/_/g, " "))}</h3>
@@ -2000,7 +2140,14 @@ function viewKnowledge() {
                   <span class="pill">${move.seated_ok === false ? "Standing" : "Seated option"}</span>
                   <span class="pill">${esc(move.intensity || "gentle")}</span>
                 </div></div>
+              ${hist
+                ? `<span class="practice-badge" title="You have done this movement ${hist.practiced} times">
+                     ${hist.practiced}×</span>`
+                : `<span class="practice-badge new" title="You have not tried this yet">New</span>`}
             </div>
+            ${mus.primary?.length ? `<p class="exercise-muscles">
+              <span class="eyebrow">Works</span> ${esc(mus.primary.join(" · "))}</p>` : ""}
+            ${mus.feel ? `<p class="exercise-feel">You should feel ${esc(mus.feel)}.</p>` : ""}
             <p class="exercise-targets">For: ${esc((move.targets || []).join(" · "))}</p>
             <div class="exercise-instruction">
               <span>Set up</span><p>${esc(move.cues?.setup || "Follow the coach's setup cue.")}</p>
@@ -2076,7 +2223,13 @@ function viewKnowledge() {
     const query = search.value.trim().toLowerCase();
     let visible = 0;
     cards.forEach((card) => {
-      const areaMatch = activeArea === "all" || card.dataset.area === activeArea;
+      // "new" is a cross-cutting filter, not a body area — it answers "what
+      // haven't I tried?", which is the question a catalog usually can't.
+      const areaMatch =
+        activeArea === "all" ||
+        (activeArea === "new"
+          ? card.dataset.practised === "no"
+          : card.dataset.area === activeArea);
       const searchMatch = !query || card.dataset.search.includes(query);
       card.hidden = !(areaMatch && searchMatch);
       if (!card.hidden) visible += 1;
@@ -2095,6 +2248,19 @@ function viewKnowledge() {
 
   filters.forEach((button) =>
     button.addEventListener("click", () => setArea(button.dataset.area)));
+
+  // Deep links from My insights: land on the area (or the movement) the user
+  // clicked, rather than dropping them at the top of a 26-item catalog.
+  if (S.learnArea) {
+    setArea(S.learnArea, true);
+    S.learnArea = null;
+  }
+  if (S.learnMove) {
+    const target = S.learnMove;
+    S.learnMove = null;
+    requestAnimationFrame(() =>
+      wrap.querySelector(`[data-demo-move="${CSS.escape(target)}"]`)?.click());
+  }
   wrap.querySelectorAll("[data-library-filter]").forEach((button) =>
     button.addEventListener("click", () => setArea(button.dataset.libraryFilter, true)));
   wrap.querySelectorAll("[data-library-start]").forEach((button) =>

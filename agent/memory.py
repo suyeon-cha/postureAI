@@ -237,6 +237,74 @@ def summary(user_id: str = "local", days: int = 7) -> dict[str, Any]:
     }
 
 
+#: Blocks of the working day. Coarse on purpose: "your neck goes at 2pm" is a
+#: pattern someone can act on; a 24-bar hourly histogram of a handful of
+#: sessions is noise wearing a chart's clothes.
+DAYPARTS = [
+    ("early", "Before 10am", 0, 10),
+    ("midday", "10am – 1pm", 10, 13),
+    ("afternoon", "1pm – 4pm", 13, 16),
+    ("late", "After 4pm", 16, 24),
+]
+
+
+def practice(user_id: str = "local", days: int = 30) -> dict[str, Any]:
+    """Per-move and per-daypart history.
+
+    Two questions the plain summary can't answer: *when* in the day discomfort
+    shows up, and *which individual movements* the user has actually practised
+    and rated. The first drives the headline insight; the second turns the
+    library from a flat catalog into a personal one.
+    """
+    since_day = date.today() - timedelta(days=days - 1)
+    since = datetime.combine(since_day, datetime.min.time()).isoformat(timespec="seconds")
+    with _lock, connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM sessions WHERE user_id = ? AND started_at >= ?",
+            (user_id, since),
+        ).fetchall()
+    sessions = [_row_to_session(r) for r in rows]
+
+    dayparts = {key: {"label": label, "sessions": 0, "by_symptom": {}}
+                for key, label, _s, _e in DAYPARTS}
+    moves: dict[str, dict[str, Any]] = {}
+
+    for s in sessions:
+        try:
+            hour = datetime.fromisoformat(s["started_at"]).hour
+        except (ValueError, TypeError):
+            hour = 12
+        for key, _label, start, end in DAYPARTS:
+            if start <= hour < end:
+                bucket = dayparts[key]
+                bucket["sessions"] += 1
+                sym = s["symptom"]
+                bucket["by_symptom"][sym] = bucket["by_symptom"].get(sym, 0) + 1
+                break
+
+        for m in s["moves"]:
+            entry = moves.setdefault(m, {"practiced": 0, "better": 0, "rated": 0})
+            entry["practiced"] += 1
+            if s["completed"] and s["response"] in ("better", "same", "worse"):
+                entry["rated"] += 1
+                if s["response"] == "better":
+                    entry["better"] += 1
+
+    busiest = max(dayparts.values(), key=lambda b: b["sessions"], default=None)
+    return {
+        "days": days,
+        "dayparts": [dict(key=k, **dayparts[k]) for k, _l, _s, _e in DAYPARTS],
+        "busiest_daypart": (
+            {"label": busiest["label"], "sessions": busiest["sessions"],
+             "top_symptom": max(busiest["by_symptom"], key=busiest["by_symptom"].get)
+             if busiest["by_symptom"] else None}
+            if busiest and busiest["sessions"] else None
+        ),
+        "moves": moves,
+        "distinct_moves": len(moves),
+    }
+
+
 def _streak(user_id: str) -> int:
     with _lock, connect() as conn:
         rows = conn.execute(

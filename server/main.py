@@ -434,6 +434,9 @@ def _dashboard_payload() -> dict[str, Any]:
         "summary": memory.summary(days=7),
         "daily": memory.daily_counts(days=7),
         "recent": memory.recent(limit=8),
+        # 30 days, not 7: time-of-day patterns and per-move practice need more
+        # than a week of a habit that is only just forming.
+        "practice": memory.practice(days=30),
         "symptom_labels": routines.SYMPTOM_LABELS,
     }
 
