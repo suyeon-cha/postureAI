@@ -29,6 +29,9 @@ Four speakers. Rehearse to 4:45 so there's air. **Every claim below is one we ca
 
 Narrate what's on screen. Do not read this script aloud verbatim.
 
+> "First time I open this, it asks before it collects anything." *(consent screen — don't
+> rush past it; two seconds here earns the privacy claim later)*
+>
 > "I've been in meetings all morning and my legs are stiff. I'll just say that." *(voice
 > intake — transcribed by Whisper on the box)*
 >
@@ -38,8 +41,8 @@ Narrate what's on screen. Do not read this script aloud verbatim.
 >
 > It tells me why *this* routine: my constraint, my time, my history.
 >
-> Now I'll turn the camera on. It was off until this click, and it goes off when I say so."
-> *(enable camera)*
+> Now the camera. It asks separately, every session — accepting once doesn't accept forever.
+> It was off until this click, and it goes off when I say so." *(enable camera)*
 >
 > "Pose inference is running on the GB10. It's counting my reps and watching my form." *(do
 > one deliberately imperfect rep)* "There — one correction, spoken out loud. One at a time,
@@ -84,9 +87,12 @@ me show you the text path"* — and continue. Do not debug on stage.
 > We start consumer-first with screen-heavy knowledge workers. Free gives you daily resets and
 > local history; premium adds unlimited routines and deeper personalization.
 >
-> The expansion is workplace wellbeing, and privacy is what makes it sellable. People Ops sees
-> aggregate engagement only — no individual, no video, no symptom detail. Any group under ten
-> people is suppressed in the database query itself, not hidden in the interface.
+> The expansion is workplace wellbeing, and privacy is what makes it sellable. Here's the part
+> worth pointing at: the employee app has no team view at all. Not hidden — it doesn't exist.
+> Employer reporting is a separate admin capability that gets participation counts above a
+> ten-person floor, and it *cannot* return body areas or how someone said they felt, because
+> those fields were removed from the query. That's the difference between a privacy policy and
+> a privacy guarantee.
 >
 > We measure resets completed, the better/same/worse response, and seven-day repeat use. Our
 > first real signal is forty percent of new users voluntarily completing three resets in their
@@ -127,6 +133,21 @@ gives you the wrong cue from a safe set, never an invented one.
 **"Why not just use the browser's speech API?"** It streams microphone audio to Google. That
 would break the local-first rule and the privacy claim. We run Whisper on the box.
 
+**"Can my manager see my data?"** No, and not because we chose not to show it — the employee
+app has no team view, and the employer query cannot return body areas or Better/Same/Worse
+responses. Those fields were removed. Employer reporting is admin-only, opt-in, and suppressed
+below ten people. Individual wellness information must never enter a personnel record.
+
+**"Is this HIPAA compliant?"** We don't claim that. `PRIVACY_AND_SAFETY.md` is explicit:
+HIPAA applicability depends on the deployment, and processing locally doesn't create
+compliance by itself. We've designed against the FDA general-wellness boundary, FTC health-app
+guidance, Washington My Health My Data, and EEOC workplace-wellness principles, and we list
+what a real employer pilot would still need.
+
+**"What happens if I withdraw consent?"** Future collection is gated again and your existing
+data stays until you separately choose to delete it. We don't silently delete your history as
+a punishment for withdrawing, and we don't keep collecting after you've said stop.
+
 ---
 
 ## Backup video — 75 seconds
@@ -136,16 +157,18 @@ over the top.
 
 | Time | Beat | On screen |
 |---|---|---|
-| 0–8s | Desk worker stiff after meetings | Landing page, then the intake screen |
-| 8–18s | Speaks a three-minute lower-body concern | Mic active → transcript appears |
-| 18–30s | Agent reads context, selects an approved plan | **Trace panel open** — tool calls landing live |
-| 30–52s | Camera on by explicit click; one issue detected | Overlay tracking, cue banner, audible Piper cue |
-| 52–62s | Completes, selects Better | Check-in → insights updating with the new row |
-| 62–70s | Privacy proof | `/api/health`: runtime name, `frames_stored: 0` |
-| 70–75s | Local proof | Terminal with egress blocked, app still working |
+| 0–6s | Desk worker stiff after meetings | Landing page |
+| 6–12s | Consent before anything is collected | Consent gate, tick, accept |
+| 12–20s | Speaks a three-minute lower-body concern | Mic active → transcript appears |
+| 20–30s | Agent reads context, selects an approved plan | **Trace panel open** — tool calls landing live |
+| 30–50s | Per-session camera consent, then one issue detected | Disclosure → overlay tracking, movement guide, cue banner, audible Piper cue |
+| 50–60s | Completes, selects Better | Check-in → insights updating with the new row |
+| 60–68s | Privacy proof | `/api/health`: runtime name, `frames_stored: 0`; then `curl /api/workspace` showing counts only |
+| 68–75s | Local proof | Terminal with egress blocked, app still working |
 
 **Non-negotiable in the recording:** the trace with real tool calls, one audible spoken cue,
-and the health endpoint. Those three are the whole differentiation.
+the health endpoint, and the workspace payload. Those four are the whole differentiation —
+the last one is what makes the B2B claim credible without a screen to show.
 
 **Record it at T+160 even if the build is imperfect.** A working recording of a slightly rough
 build beats a perfect build with no backup.

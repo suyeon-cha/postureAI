@@ -75,19 +75,44 @@ full golden path.
 ✅ Completes identically. Health badge still honest. Trace shows the same local tool calls.
 ❌ Any hang, timeout, or degraded behaviour.
 
-### Aggregate reporting — status contested
+### Aggregate reporting — now an API case, not a UI case
 
-**C13 · Workspace cohort below the floor** — View the aggregate with fewer than
-`K_ANONYMITY` (currently **10**) opted-in people.
-✅ Suppressed with an explanation. No individual row, ever.
-❌ Any per-person data, or a number derived from a cohort under the floor.
+The employee app deliberately has no team view (see DEFECT-2, resolved). These run against the
+endpoint with `curl`, not through the interface.
 
-> ⚠️ **This case may not be runnable.** `/api/workspace` and `memory.workspace_summary()` still
-> enforce the floor in SQL, but the UI nav no longer links to the Workspace view — commit
-> "replace team view with personal insights". The screen function exists and is orphaned.
-> The team must decide: restore the nav entry, or drop B2B from the judging path and the
-> go/no-go checklist. See DEFECT-2 in [DEFECT_LOG.md](DEFECT_LOG.md). Until that is decided,
-> C13 is **blocked**, not failed.
+**C13 · Cohort below the floor is suppressed** — `GET /api/workspace` with fewer than
+`K_ANONYMITY` (**10**) opted-in people.
+✅ `suppressed: true` with a reason. No counts, no teams.
+❌ Any figure derived from a cohort under ten.
+
+**C14 · Employer payload carries no sensitive fields** — `GET /api/workspace` with a cohort
+above the floor.
+✅ Participation counts only. The response contains **no** `responses`, `better_rate`,
+`by_symptom`, `moves`, `user_id`, or session rows.
+❌ Any body area, any Better/Same/Worse figure, anything per-person.
+*This is the check that proves the privacy claim in `PRIVACY_AND_SAFETY.md`. Run it and keep
+the output — it is the strongest single piece of evidence for the business slide.*
+
+### Consent controls — added in `2450d0a`
+
+**C15 · First-use consent gate** — Fresh browser profile, try to reach a personalized reset.
+✅ Cannot proceed without affirmative consent. The accept button stays disabled until the box
+is ticked. The privacy notice is reachable from the consent screen.
+❌ Any wellness preference collected, or any reset started, before consent.
+
+**C16 · Consent declined** — Choose "Not now".
+✅ Returns to welcome, stores nothing, no dead end, and the app can be re-entered later.
+❌ Partial state saved, or the user is trapped.
+
+**C17 · Withdraw consent** — Settings → Withdraw future consent.
+✅ Future collection is gated again; existing local data is **not** silently deleted; deletion
+is offered as a separate explicit action.
+❌ Silent deletion, or collection continuing after withdrawal.
+
+**C18 · Export and delete** — Settings → Export, then Delete.
+✅ Export is valid JSON containing preferences, sessions, and the recorded consent version.
+Delete actually removes sessions and preferences.
+❌ Export missing the consent record, or delete leaving rows behind.
 
 ---
 
@@ -109,9 +134,19 @@ Copy this table per run. Three consecutive clean runs are the exit condition for
 | C10 persistent fault | | | | |
 | C11 selects Worse | | | | |
 | C12 egress blocked | | | | |
-| C13 cohort < 10 | | | | blocked pending DEFECT-2 |
+| C13 cohort < 10 suppressed | | | | API, `curl` |
+| C14 no sensitive fields in employer payload | | | | API, `curl` — keep the output |
+| C15 first-use consent gate | | | | fresh profile |
+| C16 consent declined | | | | |
+| C17 withdraw consent | | | | |
+| C18 export and delete | | | | |
 
-**Go/no-go rule.** C1–C6 and C10–C12 are blocking: any failure stops the demo until fixed.
-C7–C9 failing degrades the demo but does not stop it — drop camera guidance to text-only and
-say so on stage rather than showing a cue that fires wrongly. C13 is blocking *only if* the
-team keeps B2B in the judging path.
+**Go/no-go rule.**
+
+- **Blocking** — C1–C6, C10–C12, C14, C15. A failure here stops the demo until it is fixed.
+  C14 and C15 are blocking because they are the two claims we make loudest: the employer sees
+  nothing sensitive, and nothing is collected without consent. Being wrong about either in
+  front of judges is worse than a broken camera.
+- **Degrades but does not stop** — C7–C9. Drop camera guidance to text-only and say so on
+  stage rather than show a cue that fires wrongly.
+- **Fix if time** — C13, C16–C18.

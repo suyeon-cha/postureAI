@@ -7,6 +7,10 @@ whole library against what the detectors actually emit.
 It never writes a correction. That boundary is the safety argument, so this sheet is the
 source of truth for the words, and `agent/exercises.yaml` is where they live.
 
+The same rule now covers what the user *sees*: the per-exercise movement guide added in
+`b9643e6` is a deterministic SVG figure per move, not generated imagery. If a move gains a
+guide, it is drawn, reviewed, and committed — never produced at runtime.
+
 ---
 
 ## Chair sit-to-stand — `chair_squat` (the demo movement)

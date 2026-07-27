@@ -14,29 +14,46 @@ Data consultant / PM deliverables for the two-hour build, per
 
 ---
 
-## Three things the engineers should read first
+## Two things the engineers should read first
 
-**1 · The demo currently picks the wrong movement.** The plan says chair sit-to-stand; the
-composer returns `lunge` for the lower-body request. One-word fix in `exercises.yaml`.
+Re-audited against `b9643e6`. Both are still open and both are one-line fixes in
+`agent/exercises.yaml`.
+
+**1 · The demo picks the wrong movement.** The plan says chair sit-to-stand because it is
+easier to frame; the composer returns `['figure_four', 'lunge', 'box_breath']` and never
+selects `chair_squat`. Adding `sitting` to `chair_squat.targets` fixes it — verified locally.
 → [DEFECT-1](DEFECT_LOG.md)
 
-**2 · The Workspace view is unreachable.** The backend and its k-anonymity floor are intact,
-but no nav links to the screen. The judging path and the go/no-go checklist both still require
-it. Restore it or cut it — a checklist claiming a view nobody can open is worse than either.
-→ [DEFECT-2](DEFECT_LOG.md)
-
-**3 · One knee-safety cue is detected but not delivered.** `hip_hinge` emits `knee_valgus`
+**2 · One knee-safety cue is detected but not delivered.** `hip_hinge` emits `knee_valgus`
 with no authored cue, so the user hears generic encouragement instead of the correction.
 → [DEFECT-3](DEFECT_LOG.md)
+
+**Resolved:** the orphaned Workspace view. The team chose to remove B2B from the employee app
+entirely, and narrowed the employer query so it can no longer return body areas or
+Better/Same/Worse. That is a better answer than the nav entry I recommended, and the docs now
+reflect it. → [DEFECT-2](DEFECT_LOG.md)
+
+---
+
+## Kept current with
+
+- `2450d0a` wellness privacy consent and safety controls
+- `b9643e6` camera controls and exercise-specific motion guides
+- `PRIVACY_AND_SAFETY.md` — now the authority on the employer boundary and the regulatory
+  posture; the docs here defer to it rather than restating it
+
+The consent architecture changed the golden path (a new beat 0, and camera consent is now
+per-session) and added four evaluation cases, C15–C18. The employer boundary moved case C13
+from the UI to `curl`, and added C14 — the check that the employer payload carries no
+sensitive fields. C14 and C15 are blocking.
 
 ---
 
 ## Scope note
 
-These are documentation only — no application source was touched, per the parallel-window
-rule that Person 3 doesn't edit code. Every defect names the owner and the smallest fix
-instead.
+Documentation only — no application source touched, per the parallel-window rule that Person 3
+doesn't edit code. Every defect names the owner, the file, and the smallest fix instead.
 
-Findings come from static audit of `agent/`, `perception/`, `server/`, and `ui/` at the freeze,
-plus composer and intake runs on this laptop. **Nothing camera-, model-, or audio-dependent is
-verified** — those are the U1–U6 rows in the defect log and need the GB10.
+Findings come from static audit of `agent/`, `perception/`, `server/`, and `ui/`, plus composer
+and intake runs on this laptop. **Nothing camera-, model-, or audio-dependent is verified** —
+those are the U1–U6 rows in the defect log and need the GB10.

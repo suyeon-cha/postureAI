@@ -3,12 +3,24 @@
 Owner: Person 3. Prioritized by judging-path impact, not by effort.
 
 Found by static audit of `agent/exercises.yaml`, `agent/routines.py`,
-`perception/detectors.py`, `agent/tools.py`, `agent/memory.py`, and `ui/app.js` at the freeze.
+`perception/detectors.py`, `agent/tools.py`, `agent/memory.py`, and `ui/app.js`.
 **Not yet confirmed on hardware** — the GB10 runs are Person 1's, and every camera-dependent
 case is marked accordingly.
 
 Person 3 does not edit application source during the parallel window. Each defect names an
 owner, the exact file, and the smallest fix.
+
+**Re-audited against `b9643e6`** (consent controls + camera controls + movement guides).
+DEFECT-2 is resolved by decision. **DEFECT-1, DEFECT-3, and DEFECT-4 are unchanged and still
+open** — re-verified by running the composer and re-parsing the library after pulling.
+
+| ID | Status | Severity |
+|---|---|---|
+| DEFECT-1 demo picks the lunge, not sit-to-stand | 🔴 open | P1 — blocks the demo |
+| DEFECT-2 workspace orphaned | ✅ resolved by decision | — |
+| DEFECT-3 `hip_hinge` knee-safety cue not delivered | 🔴 open | P1 correctness |
+| DEFECT-4 dead `fault_rushing` copy | 🔴 open | P3 |
+| DEFECT-5 `small_range` copy | ⚪ won't fix | P4 |
 
 ---
 
@@ -46,28 +58,37 @@ not `lunge`.
 
 ---
 
-## DEFECT-2 — Workspace view is orphaned · **P1 · scope decision needed**
+## DEFECT-2 — Workspace view orphaned · ✅ **RESOLVED by decision** (`2450d0a`)
 
-**Owner:** all three (contract-level) · `ui/app.js`
+**Resolution: option (b) — B2B is out of the employee application.**
 
-The judging path lists "Workspace shows only eligible, opt-in aggregate data" as step 9, and
-the go/no-go checklist requires it. But the nav is now `Reset` / `My insights` only — commit
-"replace team view with personal insights". `viewWorkspace()` still exists and is registered
-in the screen table; nothing routes to it. The backend is intact: `/api/workspace` and
-`memory.workspace_summary()` still enforce the k-anonymity floor in SQL.
+`PRIVACY_AND_SAFETY.md` now states it as product policy: *"The employee application contains
+no team view. Employer reporting is a separate admin capability and receives participation
+counts only after opt-in."* That is a cleaner answer than the nav entry I recommended — an
+employee-facing team view is exactly the surveillance smell the product is arguing against, so
+removing it strengthens the pitch rather than shrinking it.
 
-So the B2B safety story is *implemented and unreachable*. On stage that reads as vapour.
+The boundary is now enforced in code, not just described. `memory.workspace_summary()` was
+narrowed (`2450d0a`) and no longer returns `responses`, `better_rate`, or `by_symptom`. What
+an employer can receive is now participation counts only:
 
-**Decide one, now:**
+```
+completion_rate · participants · per_person_per_week · sessions_started
+sessions_completed · teams · suppressed_teams · k_anonymity (10)
+```
 
-- **(a) Restore it** — add the nav entry back. The screen and API already work; this is small.
-  Keeps the buyer story demoable and keeps evaluation case C13 runnable.
-- **(b) Drop B2B from the judging path** — remove step 9 and the checklist line, and present
-  Workspace as roadmap on the business slide only. Honest, and cheaper.
+Body areas and Better/Same/Worse — the two most sensitive fields — are no longer reachable
+through the employer path at all. Worth saying on stage: we didn't just hide them, we deleted
+the query.
 
-**PM recommendation: (a).** The privacy-preserving aggregate is our sharpest differentiator
-against posture-monitoring products, and it costs one nav entry. But (b) is defensible — what
-is not defensible is a checklist that claims a view nobody can open.
+**Residual · P4 · cleanup only.** `viewWorkspace()` is still defined and still registered in
+the screen table at `ui/app.js:535`, though nothing calls `go("workspace")`. It is dead code
+reachable only from a console. Harmless for judging; delete it after the freeze so the next
+person doesn't mistake it for a live feature.
+
+**Doc impact:** golden-path step 9 and the go/no-go checklist have been rewritten. Evaluation
+case C13 moves from a UI case to an API case. See
+[EVALUATION_MATRIX.md](EVALUATION_MATRIX.md).
 
 ---
 

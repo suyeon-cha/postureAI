@@ -41,16 +41,33 @@ The employee is the demo. The buyer is the business slide. **Do not conflate the
 
 | # | Beat | Proof on screen |
 |---|---|---|
+| 0 | Employee gives **affirmative first-use consent** before any wellness data is collected | Consent screen; accept stays disabled until the box is ticked; privacy notice linked |
 | 1 | Employee describes a lower-body concern and available time — **voice**, typed as fallback | Transcript appears in the intake box |
 | 2 | Approved runtime reads private context and calls FlowReset tools | Trace shows `get_user_context`, `get_reset_history` |
 | 3 | Agent selects a routine **only** from the approved library | Trace shows `select_approved_routine` returning move keys |
 | 4 | Plan screen explains *why this, for me, right now* | "Why this?" bullets cite the constraint and history |
-| 5 | Employee **explicitly** enables camera guidance | Consent control; camera was off until this click |
-| 6 | GB10 pose inference detects one supported movement issue | Named fault, overlay tracking the body |
+| 5 | Employee gives **separate per-session camera consent** | Just-in-time disclosure on the plan screen; camera was off until this click |
+| 6 | GB10 pose inference detects one supported movement issue | Named fault, overlay tracking the body, deterministic movement guide alongside |
 | 7 | One correction, visible **and** locally spoken | Cue banner + Piper audio, one cue at a time |
 | 8 | Employee completes and chooses Better / Same / Worse | Check-in screen |
 | 9 | Personal insights update with the real session | New row, distinct from seeded demo history |
 | 10 | Same path completes with external egress blocked | Terminal proof + unchanged app behaviour |
+
+**Consent is now two separate gates, and that is a feature to narrate, not a step to rush.**
+First-use consent covers wellness data; per-session camera consent is asked again every
+session and is never implied by the first. Beat 0 and beat 5 are the moments that separate
+this from a posture-monitoring product — do not click through them silently.
+
+### There is no employee-facing team view
+
+Deliberate, as of `2450d0a`. `PRIVACY_AND_SAFETY.md` is explicit: the employee application
+contains no team view, and employer reporting is a separate admin capability receiving
+participation counts only, above a ten-person floor. The employer path cannot return body
+areas or Better/Same/Worse — those fields were removed from the query, not hidden in the UI.
+
+On stage, B2B is a **business slide plus a `curl` against `/api/workspace`**, not a screen in
+the demo. That is the stronger version of the argument: the reason an employee trusts this is
+that the team view does not exist for them to worry about.
 
 **Demo movement: chair sit-to-stand (`chair_squat`).** Easier to frame and calibrate than a
 lunge. Lunge stays in the product and in the library; it is on stage only if it passes camera
@@ -70,10 +87,13 @@ Binary. If any row is No at T+120, the demo is not ready.
 | Agent, not a script | Trace shows ≥3 real tool calls before the plan appears |
 | No invented movement | Every move on screen is a key in `agent/exercises.yaml` |
 | No invented correction | Every cue is authored copy, not model prose |
-| Camera is consensual | Off by default, one click on, one click off, session survives refusal |
+| Nothing collected without consent | Fresh profile cannot reach a personalized reset without accepting |
+| Camera is consensual | Off by default, asked per session, one click off, session survives refusal |
+| Consent is withdrawable | Withdrawal gates future collection without silently deleting data |
 | One cue at a time | No overlapping or repeated audio within the cooldown |
 | Result persists | Better/Same/Worse writes locally and the insights view changes |
 | Privacy is provable | `/api/health` reports `frames_stored: 0` |
+| Employer sees counts only | `/api/workspace` returns no body area, no Better/Same/Worse, no per-person row |
 | Works offline | Full path completes with egress blocked |
 
 ---
