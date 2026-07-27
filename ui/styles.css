@@ -1268,3 +1268,29 @@ tr[data-live="true"] td { background: var(--accent-soft); }
   display: inline-block; margin-left: 5px; font-size: 0.72rem;
   opacity: 0.6; font-variant-numeric: tabular-nums;
 }
+
+/* ── explicit theme override ──
+   The media query above follows the operating system. A host that offers its
+   own light/dark toggle stamps data-theme on the root, and that choice must
+   win in *both* directions — so the tokens are restated here rather than
+   relying on the media query, which cannot be overridden by a later match. */
+:root[data-theme="light"] {
+  --bg: #f7f4ef; --bg-sunk: #efeae2; --surface: #fffdfa; --surface-2: #f4f0e9;
+  --line: #e2dbd0; --line-strong: #d2c9ba;
+  --ink: #22201d; --ink-2: #56514a; --ink-3: #857e74;
+  --accent: #6d5b9e; --accent-soft: #ece7f6; --accent-ink: #4b3d75;
+  --green: #4f7d5a; --green-soft: #e4efe5;
+  --amber: #a4762f; --amber-soft: #f6edda;
+  --rose: #9c5545; --rose-soft: #f7e7e2;
+  --shadow: 0 1px 2px rgba(40, 34, 26, 0.05), 0 8px 24px rgba(40, 34, 26, 0.06);
+}
+:root[data-theme="dark"] {
+  --bg: #17161a; --bg-sunk: #121115; --surface: #201f24; --surface-2: #26252b;
+  --line: #33313a; --line-strong: #443f4d;
+  --ink: #f0ece6; --ink-2: #b9b3ab; --ink-3: #8a8379;
+  --accent: #a996de; --accent-soft: #2b2740; --accent-ink: #c9bcf0;
+  --green: #8fc09b; --green-soft: #1f2d23;
+  --amber: #d8b071; --amber-soft: #2e2718;
+  --rose: #d99a89; --rose-soft: #31211e;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 30px rgba(0, 0, 0, 0.3);
+}
