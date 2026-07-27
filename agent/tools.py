@@ -74,6 +74,8 @@ def select_approved_routine(
         "estimated_seconds": plan["estimated_seconds"],
         "moves": plan["moves"],
         "move_names": [m["name"] for m in plan["detail"]],
+        "sets": plan["sets"],                       # which set of that move each entry is
+        "distinct_moves": plan["distinct_moves"],
         "needs_full_body": plan["needs_full_body"],
         "camera_useful": plan["camera_useful"],
         "knowledge": knowledge.topic(plan["symptom"]),

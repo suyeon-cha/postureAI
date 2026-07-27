@@ -1000,3 +1000,9 @@ tr[data-live="true"] td { background: var(--accent-soft); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+
+/* A repeated move is a set, not a duplicate row. */
+.set-tag {
+  margin-left: 10px; font-size: 0.74rem; color: var(--ink-3);
+  border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px;
+}

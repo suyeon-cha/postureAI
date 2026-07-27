@@ -54,6 +54,13 @@ SYMPTOM_LABELS = {
 # A closer that costs little and reliably lands well.
 CLOSER = "box_breath"
 
+# A reset is a few movements done properly, repeated — not a long list skimmed
+# once. Four is the ceiling on distinct exercises regardless of duration; extra
+# time buys more rounds of the same four, which is also what actually builds
+# the mind-muscle connection the coaching is for.
+MAX_DISTINCT_MOVES = 4
+MAX_ROUNDS = 4
+
 
 class NoApprovedRoutine(ValueError):
     """Raised when constraints admit no safe move — we say so, we don't improvise."""
@@ -155,57 +162,69 @@ def compose(
 
     candidates.sort(key=lambda kv: (-_score(kv[1], targets), kv[1].get("seconds", 40)))
 
-    moves: list[str] = []
-    spent = 0
     # Reserve room for the closer on anything 2 minutes or longer.
     reserve = lib[CLOSER]["seconds"] if duration_min >= 2 else 0
+    usable = budget - reserve
 
+    # Pick the distinct exercises first, then spend what's left on more rounds
+    # of them. A 10-minute reset is four movements done properly, not thirteen
+    # different ones skimmed — repetition is what builds the mind-muscle
+    # connection, and a 13-item list reads as a workout, not a desk break.
+    distinct: list[tuple[str, dict[str, Any]]] = []
+    round_cost = 0
     for key, move in candidates:
+        if len(distinct) >= MAX_DISTINCT_MOVES:
+            break
         cost = move.get("seconds", 40)
-        if spent + cost > budget - reserve:
+        if round_cost + cost > usable:
+            continue
+        distinct.append((key, move))
+        round_cost += cost
+
+    if not distinct:
+        # Budget smaller than the cheapest move — give the single cheapest one.
+        key, move = min(candidates, key=lambda kv: kv[1].get("seconds", 40))
+        distinct = [(key, move)]
+        round_cost = move.get("seconds", 40)
+
+    # Order within a round: symptom-first stays first, the rest can vary between
+    # sessions. Shuffling here rather than over the final list is what stops two
+    # identical moves landing back to back.
+    if len(distinct) > 2 and seed is None:
+        head, tail = distinct[:1], distinct[1:]
+        rng.shuffle(tail)
+        distinct = head + tail
+
+    rounds = max(1, usable // round_cost) if round_cost else 1
+    rounds = min(rounds, MAX_ROUNDS)
+
+    moves = [key for _ in range(rounds) for key, _m in distinct]
+    spent = round_cost * rounds
+
+    # Leftover time: add single moves rather than a whole extra round, cheapest
+    # first, still never exceeding the distinct-move cap.
+    for key, move in sorted(distinct, key=lambda kv: kv[1].get("seconds", 40)):
+        cost = move.get("seconds", 40)
+        if spent + cost > usable or moves[-1] == key:
             continue
         moves.append(key)
         spent += cost
-
-    # Long sessions: cycle back through the ranked list rather than stopping
-    # short. Unused moves first, and never the same move twice in a row — a
-    # routine that says "glute squeeze, then glute squeeze" reads as a bug.
-    guard = 0
-    while spent + 25 <= budget - reserve and guard < 60:
-        guard += 1
-        unused = [kv for kv in candidates if kv[0] not in moves]
-        # Gentle stretches can come round again in a long session; loaded work
-        # cannot. Two sets of lunges inside one desk break is a different
-        # product, and it reads as a bug even when it fits the budget.
-        pool = unused or [
-            kv for kv in candidates
-            if kv[0] != moves[-1] and kv[1].get("intensity") != "moderate"
-        ]
-        if not pool:
-            break
-        affordable = [kv for kv in pool if spent + kv[1].get("seconds", 40) <= budget - reserve]
-        if not affordable:
-            break
-        key, move = affordable[0] if unused else affordable[guard % len(affordable)]
-        moves.append(key)
-        spent += move.get("seconds", 40)
-
-    if not moves:
-        # Budget smaller than the cheapest move — give the single cheapest one.
-        key, move = min(candidates, key=lambda kv: kv[1].get("seconds", 40))
-        moves = [key]
-        spent = move.get("seconds", 40)
 
     if reserve:
         moves.append(CLOSER)
         spent += reserve
 
-    # Gentle variety across repeat sessions, without disturbing the first move
-    # (which is the one that actually addresses the stated symptom).
-    if len(moves) > 3 and seed is None:
-        head, tail = moves[:1], moves[1:-1] if reserve else moves[1:]
-        rng.shuffle(tail)
-        moves = head + tail + ([CLOSER] if reserve else [])
+    # Label each entry with which set of that move it is, so the UI can say
+    # "Bodyweight squat · set 2 of 3" instead of listing the same name twice
+    # and looking like a bug.
+    totals: dict[str, int] = {}
+    for key in moves:
+        totals[key] = totals.get(key, 0) + 1
+    seen_count: dict[str, int] = {}
+    sets: list[dict[str, int]] = []
+    for key in moves:
+        seen_count[key] = seen_count.get(key, 0) + 1
+        sets.append({"set": seen_count[key], "of": totals[key]})
 
     return {
         "symptom": symptom,
@@ -215,6 +234,8 @@ def compose(
         "can_stand": can_stand,
         "intensity": intensity,
         "moves": moves,
+        "sets": sets,                       # (v1.2) parallel to `moves`
+        "distinct_moves": len(totals) - (1 if CLOSER in totals else 0),
         "detail": [describe_move(k) for k in moves],
         "needs_full_body": any(lib[k].get("requires_full_body") for k in moves),
         "camera_useful": any(

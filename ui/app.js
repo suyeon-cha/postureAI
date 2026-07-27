@@ -1017,8 +1017,14 @@ function viewPlan() {
         coaching or timer-and-voice guidance.</p>
 
       <ol class="plan-moves">
-        ${p.moves.map((k, i) => `<li><span>${esc(p.move_names?.[i] || name(k))}</span>
-          ${secs(k) ? `<span class="dur">${secs(k)}s</span>` : ""}</li>`).join("")}
+        ${p.moves.map((k, i) => {
+          // A repeated move is a set, not a duplicate line — say so, or the
+          // list reads as a bug.
+          const s = p.sets?.[i];
+          const setLabel = s && s.of > 1 ? `<span class="set-tag">set ${s.set} of ${s.of}</span>` : "";
+          return `<li><span>${esc(p.move_names?.[i] || name(k))}${setLabel}</span>
+          ${secs(k) ? `<span class="dur">${secs(k)}s</span>` : ""}</li>`;
+        }).join("")}
       </ol>
 
       ${S.why.length ? `<details class="why">
