@@ -84,12 +84,19 @@ silence — but the *specific* correction is lost.
 | `hip_hinge` | `too_fast` | same generic line | P3 |
 | `squat` | `too_fast` | "Slow on the way down — four seconds." | P3 (during line happens to cover it) |
 | `glute_squeeze` | `too_fast` | "Squeeze, hold three, release." | P3 |
-| `calf_raise`, `hip_circles`, `standing_forward_fold` | `framing` | Hardcoded default: "Step back so I can see your feet." | P4 — safe default, wording only |
+| `calf_raise`, `hip_circles`, `standing_forward_fold` | `framing` | `frame_check()` reason, per move target | ✅ closed by `ac4a7cd` |
 | 17 moves | `small_range` | generic `during` line | P4 — encouragement, not safety |
 
 Only **`hip_hinge.knee_valgus`** is a real defect: a knee-safety fault is detected and the
 correction is not delivered. Fix is one line in `agent/exercises.yaml` — Person 1 owns that
 file, so it is filed rather than patched here.
+
+The `framing` rows are now closed. `ac4a7cd` moved framing out of per-move copy into
+`detectors.frame_check()`, which declares a target per move and returns the reason. The
+outline, the ready indicator, and the spoken words come from one computation, so a move
+without its own `fault_framing` string no longer falls back to a generic line — it gets the
+right one for its target. Moves may still author a `fault_framing` override where the wording
+should be specific (`lunge` and `chair_squat` do), but it is no longer required.
 
 ### Authored copy that can never fire
 

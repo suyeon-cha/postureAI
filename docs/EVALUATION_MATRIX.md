@@ -31,13 +31,29 @@ no silent failure.
 
 ### Framing and confidence
 
-**C4 · No person visible** — Step out of frame.
-✅ Asks you to move into frame. Makes no claim about form.
-❌ Any form judgment while nobody is detected.
+`ac4a7cd` added `detectors.frame_check()`: each move declares how much of the body must be
+visible (torso for seated work, full body wherever the form rules read knee and ankle
+landmarks), and one function computes the target, whether it is met, and the reason. The
+on-canvas outline, the ready indicator, and the spoken cue all read from it — so these three
+cases now also test that **they agree with each other**. A mismatch between the outline and
+the words is a failure even if each is individually sensible.
 
-**C5 · Lower body cropped** — Sit close so only the torso is visible, on a full-body move.
-✅ "Step back so I can see your knees and feet" before judging the movement.
-❌ Rep counting or a form fault fired on a body it cannot see.
+**C4 · No person visible** — Step out of frame.
+✅ "Step into view — I can't see you yet." Guide outline shows where to stand. No claim about
+form.
+❌ Any form judgment while nobody is detected, or an outline that contradicts the message.
+
+**C5 · Lower body cropped** — Sit close so only the torso is visible, on a full-body move
+(`chair_squat`).
+✅ "Step back until I can see your feet" **before** judging the movement, with the full-body
+outline drawn. Indicator reads not-ready.
+❌ Rep counting or a form fault fired on a body it cannot see; or a torso-target outline shown
+for a full-body move.
+
+**C5b · Correct target per move** — Run a seated move (`glute_squeeze`), then a full-body one.
+✅ Seated asks for head and shoulders only; full body asks for feet. The requirement changes
+with the move.
+❌ Same demand for both — that means the per-move target isn't wired through.
 
 **C6 · Low confidence** — Poor light, or partly behind the desk.
 ✅ Recalibration or framing message. Does **not** classify form.
@@ -126,7 +142,8 @@ Copy this table per run. Three consecutive clean runs are the exit condition for
 | C2 camera denied | | | | |
 | C3 camera revoked | | | | |
 | C4 no person | | | | |
-| C5 cropped | | | | |
+| C5 cropped | | | | outline + words must agree |
+| C5b per-move frame target | | | | seated vs full-body |
 | C6 low confidence | | | | |
 | C7 correct reps | | | | |
 | C8 too fast | | | | |

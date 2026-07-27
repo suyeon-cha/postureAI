@@ -39,6 +39,9 @@ reflect it. → [DEFECT-2](DEFECT_LOG.md)
 
 - `2450d0a` wellness privacy consent and safety controls
 - `b9643e6` camera controls and exercise-specific motion guides
+- `ac4a7cd` guided frame with a per-move target and position gate — one `frame_check()` drives
+  the outline, the indicator, and the cue, so evaluation cases C4–C6 now also test that those
+  three agree
 - `PRIVACY_AND_SAFETY.md` — now the authority on the employer boundary and the regulatory
   posture; the docs here defer to it rather than restating it
 
