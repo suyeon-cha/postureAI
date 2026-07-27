@@ -1134,6 +1134,58 @@ tr[data-live="true"] td { background: var(--accent-soft); }
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
 
+/* A repeated move is a set, not a duplicate row. */
+.set-tag {
+  margin-left: 10px; font-size: 0.74rem; color: var(--ink-3);
+  border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px;
+}
+
+/* ── movement guide, embedded in the camera frame ──
+   A ghost figure the user mirrors, not a diagram beside the video. Sits above
+   the pose skeleton but below the framing outline, and never intercepts
+   clicks. */
+.guide-ghost {
+  position: absolute; inset: 0; z-index: 2;
+  display: grid; place-items: center; padding: 6% 6% 22%;
+  pointer-events: none; opacity: 0.42;
+  transition: opacity 0.25s ease;
+}
+.guide-ghost svg { width: auto; height: 100%; max-width: 100%; }
+.cam-wrap[data-guide="off"] .guide-ghost,
+.cam-wrap[data-guide="off"] .guide-caption { opacity: 0; }
+
+.guide-caption {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 3;
+  padding: 34px 16px 14px;
+  background: linear-gradient(to top, rgba(12, 10, 16, 0.88), transparent);
+  color: #fff; pointer-events: none; transition: opacity 0.25s ease;
+}
+.guide-caption-move {
+  display: inline-block; font-size: 0.72rem; letter-spacing: 0.06em;
+  text-transform: uppercase; opacity: 0.75; margin-bottom: 3px;
+}
+.guide-caption p { font-size: 0.9rem; line-height: 1.45; }
+.guide-caption-during { opacity: 0.78; font-size: 0.83rem; }
+
+.guide-toggle {
+  position: absolute; right: 10px; top: 10px; z-index: 4;
+  background: rgba(20, 18, 16, 0.72); color: #fff; border: 0;
+  border-radius: 999px; padding: 5px 13px; font-size: 0.74rem;
+  backdrop-filter: blur(6px);
+}
+.guide-toggle[aria-pressed="false"] { opacity: 0.55; }
+
+/* The camera panel is now the main stage, so give it room to breathe. */
+.cam-wrap { min-height: 320px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .guide-ghost, .guide-caption { transition: none; }
+}
+
+/* The caption now owns the bottom of the frame, so the privacy flag moves to
+   the top-left rather than sitting on top of the movement instruction. */
+.cam-flag { top: 10px; bottom: auto; }
+
 </style>
 
     <div class="shell">
@@ -3004,8 +3056,14 @@ function viewPlan() {
         communicates, then decide whether to add private camera feedback.</p>
 
       <ol class="plan-moves">
-        ${p.moves.map((k, i) => `<li><span>${esc(p.move_names?.[i] || name(k))}</span>
-          ${secs(k) ? `<span class="dur">${secs(k)}s</span>` : ""}</li>`).join("")}
+        ${p.moves.map((k, i) => {
+          // A repeated move is a set, not a duplicate line — say so, or the
+          // list reads as a bug.
+          const s = p.sets?.[i];
+          const setLabel = s && s.of > 1 ? `<span class="set-tag">set ${s.set} of ${s.of}</span>` : "";
+          return `<li><span>${esc(p.move_names?.[i] || name(k))}${setLabel}</span>
+          ${secs(k) ? `<span class="dur">${secs(k)}s</span>` : ""}</li>`;
+        }).join("")}
       </ol>
 
       ${S.why.length ? `<details class="why">
@@ -3140,25 +3198,6 @@ function viewSession() {
           </button>
         </div>
 
-        <section class="movement-guide-card" aria-labelledby="guideTitle">
-          <div class="movement-guide-head">
-            <div>
-              <span class="eyebrow">Movement guide</span>
-              <h2 id="guideTitle">Follow the example</h2>
-            </div>
-            <span class="pill info" id="guideMove">Getting ready…</span>
-          </div>
-          <div id="movementGuide" class="movement-guide-stage">
-            ${movementGuideMarkup(null)}
-          </div>
-          <div class="movement-guide-copy">
-            <span>Set up</span>
-            <p id="guideSetup">Get into a comfortable starting position.</p>
-            <span>Move</span>
-            <p id="guideDuring">Move slowly and stay within a comfortable range.</p>
-          </div>
-        </section>
-
         <div class="video-status" id="videoStatus" data-state="${S.cameraOn ? "scanning" : "off"}">
           <span class="video-status-dot"></span>
           <div><strong>${S.cameraOn ? "Video AI is finding your position" : "Video AI is off"}</strong>
@@ -3168,6 +3207,19 @@ function viewSession() {
         <div class="cam-wrap" id="camWrap">
           <video id="cam" autoplay muted playsinline></video>
           <canvas id="overlay"></canvas>
+          <!-- The movement guide lives *inside* the camera frame: a ghost
+               figure the user lines themselves up against and mirrors. Side by
+               side it was a diagram to glance at; on top it is a target. -->
+          <div id="movementGuide" class="guide-ghost" data-mode="overlay" aria-hidden="true">
+            ${movementGuideMarkup(null)}
+          </div>
+          <div class="guide-caption" id="guideCaption">
+            <span class="guide-caption-move" id="guideMove">Getting ready…</span>
+            <p id="guideSetup">Get into a comfortable starting position.</p>
+            <p id="guideDuring" class="guide-caption-during"></p>
+          </div>
+          <button class="guide-toggle" id="guideToggle" aria-pressed="true"
+            title="Show or hide the movement guide">Guide</button>
           <div class="cam-off" id="camOff" ${S.cameraOn ? "hidden" : ""}>
             <strong>Camera is off</strong>
             <p class="small muted">Use the animated movement guide and text tips, or turn
@@ -3253,6 +3305,12 @@ function viewSession() {
   $("#skip", wrap).addEventListener("click", () => send({ type: "skip" }));
   $("#stop", wrap).addEventListener("click", () => finishSession(false));
   $("#camToggle", wrap).addEventListener("click", toggleCamera);
+  // Some people want to see themselves unobstructed once they know the move.
+  $("#guideToggle", wrap).addEventListener("click", (e) => {
+    S.guideHidden = !S.guideHidden;
+    e.currentTarget.setAttribute("aria-pressed", String(!S.guideHidden));
+    $("#camWrap", wrap).dataset.guide = S.guideHidden ? "off" : "on";
+  });
   // Confirming position restarts the move's tracker, so reps are counted from
   // where the user actually began — not from the seconds they spent walking
   // into frame, which otherwise show up as a phantom rep and a "too fast" cue.
