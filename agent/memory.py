@@ -52,6 +52,21 @@ CREATE TABLE IF NOT EXISTS prefs (
     payload     TEXT NOT NULL
 );
 
+-- How the body feels, in the user's own reckoning, independent of whether
+-- they did a reset. Sessions only tell us about the moments someone acted;
+-- this is the baseline those moments are measured against, and it is the one
+-- signal the camera and the agent cannot infer for themselves.
+CREATE TABLE IF NOT EXISTS checkins (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     TEXT NOT NULL DEFAULT 'local',
+    logged_at   TEXT NOT NULL,
+    area        TEXT NOT NULL,
+    level       INTEGER NOT NULL,          -- 1 easy ... 5 rough
+    note        TEXT,
+    is_demo     INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_checkins_user ON checkins(user_id, logged_at);
+
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id, started_at);
 CREATE INDEX IF NOT EXISTS idx_sessions_team ON sessions(team, started_at);
 """
@@ -302,6 +317,147 @@ def practice(user_id: str = "local", days: int = 30) -> dict[str, Any]:
         ),
         "moves": moves,
         "distinct_moves": len(moves),
+    }
+
+
+#: Check-in scale. Words, not bare numbers — "rough" is something a person
+#: recognises about their own body; "4" is a datapoint about someone else's.
+CHECKIN_LEVELS = {
+    1: "Easy",
+    2: "Fine",
+    3: "Noticeable",
+    4: "Sore",
+    5: "Rough",
+}
+
+
+def log_checkin(area: str, level: int, note: str = "", user_id: str = "local") -> dict[str, Any]:
+    """Record how the body feels right now. Local, like everything else."""
+    level = max(1, min(5, int(level)))
+    now = datetime.now().isoformat(timespec="seconds")
+    with _lock, connect() as conn:
+        cur = conn.execute(
+            "INSERT INTO checkins (user_id, logged_at, area, level, note) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (user_id, now, area, level, (note or "")[:280]),
+        )
+        conn.commit()
+        return {"id": cur.lastrowid, "logged_at": now, "area": area, "level": level}
+
+
+def checkins(user_id: str = "local", days: int = 30) -> dict[str, Any]:
+    """Check-in history, plus the trend that makes it worth collecting.
+
+    A single rating is a mood. A fortnight of them, split against the days a
+    reset happened, is the closest this product can honestly get to "is any
+    of this working?" — so that comparison is computed here rather than left
+    for the UI to imply.
+    """
+    since_day = date.today() - timedelta(days=days - 1)
+    since = datetime.combine(since_day, datetime.min.time()).isoformat(timespec="seconds")
+    with _lock, connect() as conn:
+        rows = [dict(r) for r in conn.execute(
+            "SELECT * FROM checkins WHERE user_id = ? AND logged_at >= ? "
+            "ORDER BY logged_at DESC",
+            (user_id, since),
+        ).fetchall()]
+        session_days = {
+            r["d"] for r in conn.execute(
+                "SELECT DISTINCT date(started_at) AS d FROM sessions "
+                "WHERE user_id = ? AND completed = 1 AND started_at >= ?",
+                (user_id, since),
+            ).fetchall()
+        }
+
+    by_day: dict[str, list[int]] = {}
+    by_area: dict[str, list[int]] = {}
+    for r in rows:
+        day = r["logged_at"][:10]
+        by_day.setdefault(day, []).append(r["level"])
+        by_area.setdefault(r["area"], []).append(r["level"])
+
+    def mean(xs):
+        return round(sum(xs) / len(xs), 2) if xs else None
+
+    # The comparison that justifies asking: does the body read better on days
+    # a reset happened? Honest about being observational, not causal.
+    on_reset = [lv for day, lvs in by_day.items() if day in session_days for lv in lvs]
+    off_reset = [lv for day, lvs in by_day.items() if day not in session_days for lv in lvs]
+
+    trend = [
+        {"date": d, "level": mean(by_day[d]), "reset": d in session_days}
+        for d in sorted(by_day)
+    ]
+    return {
+        "days": days,
+        "levels": CHECKIN_LEVELS,
+        "count": len(rows),
+        "latest": rows[0] if rows else None,
+        "logged_today": any(r["logged_at"][:10] == date.today().isoformat() for r in rows),
+        "trend": trend,
+        "average": mean([lv for lvs in by_day.values() for lv in lvs]),
+        "by_area": {a: {"average": mean(v), "count": len(v)} for a, v in by_area.items()},
+        "on_reset_days": mean(on_reset),
+        "off_reset_days": mean(off_reset),
+    }
+
+
+#: What the wellbeing score is made of, and how much each part can contribute.
+#: Named and weighted in the open because a score whose derivation is hidden is
+#: a number people learn to distrust — Oura shows its contributors for exactly
+#: this reason.
+SCORE_PARTS = [
+    ("consistency", "Consistency", 35, "Resets completed across the week"),
+    ("relief", "Relief", 30, "How often a reset left you feeling better"),
+    ("coverage", "Coverage", 20, "Different body areas you've addressed"),
+    ("follow_through", "Follow-through", 15, "Resets you started and finished"),
+]
+
+
+def wellbeing_score(user_id: str = "local", days: int = 7) -> dict[str, Any]:
+    """A single 0–100 desk-wellbeing number, with its parts shown.
+
+    Deliberately not a health score: it measures the habit, not the body. A
+    product that cannot examine you should not imply it has.
+    """
+    s = summary(user_id=user_id, days=days)
+    pr = practice(user_id=user_id, days=days)
+
+    # 5 completed resets a week is the target — roughly one per working day.
+    consistency = min(s["sessions_completed"] / 5.0, 1.0)
+    rated = sum(s["responses"].values())
+    relief = s["better_rate"] if rated else 0.0
+    coverage = min(len(s["by_symptom"]) / 3.0, 1.0)      # 3 areas is well-rounded
+    follow_through = s["completion_rate"]
+
+    values = {
+        "consistency": consistency,
+        "relief": relief,
+        "coverage": coverage,
+        "follow_through": follow_through,
+    }
+    parts = []
+    total = 0.0
+    for key, label, weight, why in SCORE_PARTS:
+        earned = values[key] * weight
+        total += earned
+        parts.append({
+            "key": key, "label": label, "why": why,
+            "weight": weight, "earned": round(earned),
+            "pct": round(values[key] * 100),
+        })
+
+    score = round(total)
+    band = ("Building" if score < 40 else "Steady" if score < 70 else "Strong")
+    weakest = min(parts, key=lambda p: p["pct"]) if rated or s["sessions_started"] else None
+    return {
+        "score": score,
+        "band": band,
+        "days": days,
+        "parts": parts,
+        "focus": weakest,
+        "has_data": bool(s["sessions_started"]),
+        "practised_moves": pr["distinct_moves"],
     }
 
 

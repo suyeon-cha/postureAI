@@ -34,6 +34,32 @@ MOVES_BY_SYMPTOM = {
 TEAMS = ["Engineering", "Design", "Data", "Support"]
 
 
+
+def _seed_checkins(conn, uid: str, rng) -> int:
+    """Body check-ins across the window.
+
+    Gaps and a shallow easing trend on purpose: a perfectly logged, perfectly
+    improving series would look fabricated, because it would be.
+    """
+    conn.execute("DELETE FROM checkins WHERE is_demo = 1 AND user_id = ?", (uid,))
+    areas = ["neck_shoulders", "back_hips", "legs_glutes", "wrists_hands", "tired_eyes"]
+    n = 0
+    for i in range(20, -1, -1):
+        if rng.random() < 0.25:          # days people simply forget
+            continue
+        when = (datetime.now() - timedelta(days=i)).replace(
+            hour=9 + rng.randrange(8), minute=0, second=0, microsecond=0)
+        drift = 3.6 - (20 - i) * 0.03
+        level = max(1, min(5, round(drift + (rng.random() - 0.5) * 1.4)))
+        conn.execute(
+            "INSERT INTO checkins(user_id, logged_at, area, level, note, is_demo) "
+            "VALUES(?, ?, ?, ?, '', 1)",
+            (uid, when.isoformat(timespec="seconds"), rng.choice(areas), level),
+        )
+        n += 1
+    return n
+
+
 def _insert(conn, user_id, team, when, symptom, duration, moves, completed, response, camera):
     conn.execute(
         "INSERT INTO sessions"
@@ -125,9 +151,14 @@ def seed(force: bool = False, seed_value: int = 7) -> dict[str, int]:
                         completed, response, rng.random() < 0.5)
                 workspace += 1
 
+    with memory._lock, memory.connect() as conn:
+        checkins = _seed_checkins(conn, memory.DEFAULT_USER if hasattr(memory, 'DEFAULT_USER') else 'local', rng)
+        conn.commit()
+
     # The demo user opts in too, so they appear in their own workspace view.
     memory.set_prefs({"team": "Engineering", "workspace_opt_in": True}, DEMO_USER)
-    return {"personal": personal, "workspace": workspace, "people": len(people) + 1}
+    return {"personal": personal, "workspace": workspace, "checkins": checkins,
+            "people": len(people) + 1}
 
 
 if __name__ == "__main__":

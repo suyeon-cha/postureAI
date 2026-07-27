@@ -437,6 +437,9 @@ def _dashboard_payload() -> dict[str, Any]:
         # 30 days, not 7: time-of-day patterns and per-move practice need more
         # than a week of a habit that is only just forming.
         "practice": memory.practice(days=30),
+        "score": memory.wellbeing_score(days=7),
+        "calendar": memory.daily_counts(days=35),   # 5 whole weeks for the grid
+        "checkins": memory.checkins(days=30),
         "symptom_labels": routines.SYMPTOM_LABELS,
     }
 
@@ -449,6 +452,19 @@ async def health() -> JSONResponse:
 @app.get("/api/dashboard")
 async def dashboard() -> JSONResponse:
     return JSONResponse(_dashboard_payload())
+
+
+@app.post("/api/checkin")
+async def checkin(body: dict[str, Any]) -> JSONResponse:
+    """How the body feels, in the user's own words. Stays on this machine."""
+    entry = memory.log_checkin(
+        area=body.get("area", "general"),
+        level=body.get("level", 3),
+        note=body.get("note", ""),
+    )
+    payload = _dashboard_payload()
+    await broadcast.send({"type": "dashboard", "data": payload})
+    return JSONResponse({"ok": True, "entry": entry, "checkins": payload["checkins"]})
 
 
 @app.get("/api/workspace")

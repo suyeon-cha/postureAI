@@ -1305,3 +1305,91 @@ tr[data-live="true"] td { background: var(--accent-soft); }
 }
 .exercise-guide-card .exercise-demo-button { justify-self: start; padding: 8px 16px; }
 .exercise-library-grid { align-items: start; }
+
+/* ── wellbeing score ──
+   One number, with its parts visible underneath. Oura shows contributors for
+   a reason: a score whose derivation is hidden is one people stop trusting. */
+.score-card {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 30px; align-items: center;
+}
+@media (max-width: 760px) { .score-card { grid-template-columns: 1fr; justify-items: center; } }
+
+.score-ring-wrap { position: relative; width: 128px; height: 128px; }
+.score-ring { width: 128px; height: 128px; transform: rotate(-90deg); }
+.score-ring circle { fill: none; stroke-width: 11; stroke-linecap: round; }
+.ring-track { stroke: var(--surface-2); }
+.ring-fill { stroke: var(--accent); transition: stroke-dasharray 0.6s ease; }
+.score-value {
+  position: absolute; inset: 0; display: grid; place-content: center; text-align: center;
+}
+.score-value strong { font-size: 2.3rem; font-weight: 620; line-height: 1; letter-spacing: -0.03em; }
+.score-value span { font-size: 0.74rem; color: var(--ink-2); text-transform: uppercase; letter-spacing: 0.06em; }
+
+.score-parts { list-style: none; margin: 0; padding: 0; display: grid; gap: 13px; }
+.score-part-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  font-size: 0.88rem; font-weight: 520;
+}
+.score-part-num { font-variant-numeric: tabular-nums; font-size: 0.82rem; }
+.score-part-bar {
+  height: 6px; border-radius: 999px; background: var(--surface-2);
+  overflow: hidden; margin: 4px 0 2px;
+}
+.score-part-bar span { display: block; height: 100%; background: var(--accent); border-radius: 999px; }
+.score-focus {
+  font-size: 0.86rem; border-left: 2px solid var(--amber);
+  padding-left: 11px; color: var(--ink-2);
+}
+
+/* ── check-in ── the one signal the camera cannot infer ── */
+.checkin-card { display: grid; gap: 18px; }
+.checkin-controls { display: grid; gap: 10px; justify-items: start; }
+.checkin-row { display: flex; flex-wrap: wrap; gap: 7px; }
+.level-chip {
+  display: inline-flex; align-items: center; gap: 7px;
+  background: transparent; color: var(--ink-2);
+  border: 1px solid var(--line); border-radius: 999px;
+  padding: 6px 14px; font-size: 0.85rem;
+}
+.level-chip[aria-pressed="true"] { border-color: var(--accent); color: var(--ink); background: var(--accent-soft); }
+.level-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.level-dot[data-lv="1"] { background: var(--green); }
+.level-dot[data-lv="2"] { background: color-mix(in srgb, var(--green) 65%, var(--amber)); }
+.level-dot[data-lv="3"] { background: var(--amber); }
+.level-dot[data-lv="4"] { background: color-mix(in srgb, var(--amber) 55%, var(--rose)); }
+.level-dot[data-lv="5"] { background: var(--rose); }
+
+.checkin-trend { display: grid; gap: 8px; border-top: 1px solid var(--line); padding-top: 16px; }
+.trend-strip {
+  display: flex; align-items: flex-end; gap: 4px; height: 62px;
+  padding: 4px; background: var(--surface-2); border-radius: 9px;
+}
+.trend-bar {
+  flex: 1; min-height: 5px; border-radius: 3px 3px 0 0;
+  background: var(--ink-3); opacity: 0.55;
+}
+.trend-bar[data-reset="true"] { background: var(--accent); opacity: 1; }
+.checkin-compare strong { font-variant-numeric: tabular-nums; }
+
+/* ── consistency calendar ── each square a day; the streak is the point ── */
+.cal-grid {
+  display: grid; grid-template-rows: repeat(7, 1fr); grid-auto-flow: column;
+  gap: 4px; justify-content: start;
+}
+.cal-cell, .cal-key i {
+  width: 15px; height: 15px; border-radius: 4px; display: block;
+  background: var(--surface-2);
+}
+.cal-cell[data-lv="1"], .cal-key i[data-lv="1"] { background: color-mix(in srgb, var(--accent) 32%, var(--surface-2)); }
+.cal-cell[data-lv="2"], .cal-key i[data-lv="2"] { background: color-mix(in srgb, var(--accent) 62%, var(--surface-2)); }
+.cal-cell[data-lv="3"], .cal-key i[data-lv="3"] { background: var(--accent); }
+.cal-key { display: flex; align-items: center; gap: 4px; font-size: 0.72rem; color: var(--ink-3); }
+
+/* ── body map ── the axis is your own body, so it reads faster than bars ── */
+.bodymap-wrap { display: grid; place-items: center; padding: 6px 0; }
+.bodymap { width: 128px; height: auto; }
+.bm-base { fill: var(--surface-2); }
+.bm-heat ellipse { fill: var(--rose); }
+.bodymap-legend { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 0.83rem; }
+.bodymap-legend li { display: flex; align-items: center; gap: 8px; }
+.legend-swatch { width: 11px; height: 11px; border-radius: 3px; background: var(--rose); flex: none; }

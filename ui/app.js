@@ -1808,6 +1808,15 @@ function viewDashboard() {
       }. Getting ahead of it with one reset before that block tends to work better than reacting after.`
     : nextSteps[topSymptom] || nextSteps.general;
 
+  const score = d.score || null;
+  const chk = d.checkins || null;
+  const calendar = d.calendar || [];
+
+  // Score ring geometry. One number with its parts shown underneath — a score
+  // whose derivation is hidden is one people learn to distrust.
+  const R = 52, C = 2 * Math.PI * R;
+  const pctArc = score ? (score.score / 100) * C : 0;
+
   const wrap = el(`<div class="stack">
     <div class="insights-head">
       <div class="stack-sm"><span class="eyebrow">Private to you</span><h1>My insights</h1>
@@ -1819,6 +1828,73 @@ function viewDashboard() {
         <div><strong>${Math.round((s.better_rate || 0) * 100)}%</strong><span>felt better</span></div>
       </div>
     </div>
+
+    ${score && score.has_data ? `<section class="card score-card">
+      <div class="score-ring-wrap">
+        <svg class="score-ring" viewBox="0 0 128 128" role="img"
+          aria-label="Desk wellbeing score ${score.score} out of 100, ${esc(score.band)}">
+          <circle class="ring-track" cx="64" cy="64" r="${R}"></circle>
+          <circle class="ring-fill" cx="64" cy="64" r="${R}"
+            stroke-dasharray="${pctArc.toFixed(1)} ${(C - pctArc).toFixed(1)}"></circle>
+        </svg>
+        <div class="score-value"><strong>${score.score}</strong><span>${esc(score.band)}</span></div>
+      </div>
+      <div class="score-body stack-sm">
+        <span class="eyebrow">Desk wellbeing · last ${score.days} days</span>
+        <h2>What this score is made of</h2>
+        <p class="small muted">This measures the habit, not your body — FlowReset can't
+          examine you, so it doesn't pretend to.</p>
+        <ul class="score-parts">
+          ${score.parts.map((p) => `<li>
+            <div class="score-part-head">
+              <span>${esc(p.label)}</span>
+              <span class="score-part-num">${p.earned}<span class="muted">/${p.weight}</span></span>
+            </div>
+            <div class="score-part-bar"><span style="width:${p.pct}%"></span></div>
+            <p class="tiny muted">${esc(p.why)}</p>
+          </li>`).join("")}
+        </ul>
+        ${score.focus ? `<p class="score-focus">Biggest gain available:
+          <strong>${esc(score.focus.label.toLowerCase())}</strong> — ${esc(score.focus.why.toLowerCase())}.</p>` : ""}
+      </div>
+    </section>` : ""}
+
+    <section class="card checkin-card" aria-labelledby="checkinTitle">
+      <div class="stack-sm">
+        <span class="eyebrow">${chk?.logged_today ? "Logged today" : "Takes five seconds"}</span>
+        <h2 id="checkinTitle">How does your body feel right now?</h2>
+        <p class="small muted">The one thing the camera can't tell us. It's also what makes
+          the trend below mean anything.</p>
+      </div>
+      <div class="checkin-controls">
+        <div class="checkin-row" id="checkinArea" role="group" aria-label="Body area">
+          ${Object.entries(labels).filter(([k]) => k !== "general").map(([k, v], i) =>
+            `<button class="chip" data-area="${esc(k)}" aria-pressed="${i === 0}">${esc(v)}</button>`).join("")}
+        </div>
+        <div class="checkin-row" id="checkinLevel" role="group" aria-label="How it feels">
+          ${Object.entries(chk?.levels || { 1: "Easy", 2: "Fine", 3: "Noticeable", 4: "Sore", 5: "Rough" })
+            .map(([lv, name]) =>
+              `<button class="level-chip" data-level="${lv}" aria-pressed="${lv === "3"}">
+                <span class="level-dot" data-lv="${lv}"></span>${esc(name)}</button>`).join("")}
+        </div>
+        <button class="btn" id="checkinSave">Log how I feel</button>
+      </div>
+      ${chk?.count ? `<div class="checkin-trend">
+        <span class="eyebrow">Last ${chk.days} days</span>
+        <div class="trend-strip" role="img" aria-label="Daily check-in levels">
+          ${chk.trend.slice(-21).map((t) => `<span class="trend-bar" data-reset="${t.reset}"
+            style="height:${(t.level / 5) * 100}%"
+            title="${esc(t.date)} · ${esc(chk.levels[Math.round(t.level)] || t.level)}${t.reset ? " · reset done" : ""}"></span>`).join("")}
+        </div>
+        ${chk.on_reset_days != null && chk.off_reset_days != null ? `
+          <p class="small checkin-compare">On days you completed a reset your body reads
+            <strong>${chk.on_reset_days.toFixed(1)}</strong>, versus
+            <strong>${chk.off_reset_days.toFixed(1)}</strong> on days you didn't.
+            <span class="muted">Lower is easier. Observational, not proof.</span></p>`
+          : `<p class="tiny muted">Log on a few more days — including days without a reset —
+             and this will compare the two.</p>`}
+      </div>` : ""}
+    </section>
 
     <section class="card insight-hero" aria-labelledby="next-step-title">
       <div class="stack-sm">
@@ -1889,6 +1965,44 @@ function viewDashboard() {
     </div>
 
     <div class="insight-lower">
+      <section class="card stack" aria-labelledby="calTitle">
+        <div class="insight-card-head">
+          <div class="stack-sm"><span class="eyebrow">Consistency</span>
+            <h2 id="calTitle">Your last five weeks</h2></div>
+          <div class="cal-key"><span>fewer</span>
+            <i data-lv="0"></i><i data-lv="1"></i><i data-lv="2"></i><i data-lv="3"></i>
+            <span>more</span></div>
+        </div>
+        <div class="cal-grid" role="img"
+          aria-label="Daily reset activity over the last five weeks">
+          ${calendar.map((day) => {
+            const n = day.completed || 0;
+            const lv = n === 0 ? 0 : n === 1 ? 1 : n === 2 ? 2 : 3;
+            const dt = new Date(day.date + "T00:00:00");
+            return `<i class="cal-cell" data-lv="${lv}"
+              title="${dt.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })} · ${n} completed"></i>`;
+          }).join("")}
+        </div>
+        <p class="tiny muted">Each square is a day. The streak matters more than any
+          single session — this is the picture worth protecting.</p>
+      </section>
+
+      <section class="card stack" aria-labelledby="bodyTitle">
+        <div class="stack-sm"><span class="eyebrow">Where it shows up</span>
+          <h2 id="bodyTitle">Your body map</h2></div>
+        <div class="bodymap-wrap" id="bodymap"></div>
+        <ul class="bodymap-legend">
+          ${Object.entries(s.by_symptom || {}).sort((a, b) => b[1] - a[1]).slice(0, 4)
+            .map(([k, n]) => {
+              const max = Math.max(...Object.values(s.by_symptom || { x: 1 }));
+              return `<li><span class="legend-swatch" style="opacity:${(0.25 + 0.75 * (n / max)).toFixed(2)}"></span>
+                ${esc(labels[k] || k)} <span class="muted">${n}</span></li>`;
+            }).join("")}
+        </ul>
+      </section>
+    </div>
+
+    <div class="insight-lower">
       <section class="card stack" aria-labelledby="historyTitle">
         <div class="insight-card-head">
           <div class="stack-sm"><span class="eyebrow">History</span>
@@ -1923,6 +2037,66 @@ function viewDashboard() {
     S.intake.touched.symptom = true;
     S.intake.touched.duration = true;
     go("home");
+  });
+
+  // Body map: heat where discomfort actually gets reported. A figure reads
+  // faster than a bar chart for "where", because the axis is your own body.
+  const bm = $("#bodymap", wrap);
+  if (bm) {
+    const by = s.by_symptom || {};
+    const max = Math.max(...Object.values(by), 1);
+    const heat = (k) => (by[k] ? (0.22 + 0.78 * (by[k] / max)).toFixed(2) : "0.06");
+    bm.innerHTML = `<svg viewBox="0 0 120 210" class="bodymap" role="img"
+      aria-label="Body areas shaded by how often you reported them">
+      <g class="bm-base">
+        <circle cx="60" cy="24" r="15"/>
+        <path d="M45 44 h30 l6 46 h-42 z"/>
+        <path d="M39 46 l-11 40 6 3 13-37z"/><path d="M81 46 l11 40 -6 3 -13-37z"/>
+        <path d="M47 92 h11 l-2 60 h-11z"/><path d="M62 92 h11 l2 60 h-11z"/>
+      </g>
+      <g class="bm-heat">
+        <ellipse cx="60" cy="47" rx="24" ry="12" style="opacity:${heat("neck_shoulders")}"/>
+        <ellipse cx="60" cy="80" rx="20" ry="14" style="opacity:${heat("back_hips")}"/>
+        <ellipse cx="60" cy="120" rx="22" ry="26" style="opacity:${heat("legs_glutes")}"/>
+        <ellipse cx="30" cy="88" rx="8" ry="9" style="opacity:${heat("wrists_hands")}"/>
+        <ellipse cx="90" cy="88" rx="8" ry="9" style="opacity:${heat("wrists_hands")}"/>
+        <ellipse cx="60" cy="21" rx="13" ry="7" style="opacity:${heat("tired_eyes")}"/>
+      </g>
+    </svg>`;
+  }
+
+  // Check-in. Optimistic UI would be wrong here — the comparison below depends
+  // on the server's recomputed aggregate, so wait for it and re-render.
+  const areaRow = $("#checkinArea", wrap);
+  const levelRow = $("#checkinLevel", wrap);
+  const pickOne = (row, attr) => (btn) => {
+    [...row.children].forEach((c) => c.setAttribute("aria-pressed", String(c === btn)));
+  };
+  areaRow?.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-area]");
+    if (b) pickOne(areaRow)(b);
+  });
+  levelRow?.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-level]");
+    if (b) pickOne(levelRow)(b);
+  });
+  $("#checkinSave", wrap)?.addEventListener("click", async (e) => {
+    const area = areaRow?.querySelector('[aria-pressed="true"]')?.dataset.area || "general";
+    const level = +(levelRow?.querySelector('[aria-pressed="true"]')?.dataset.level || 3);
+    e.currentTarget.disabled = true;
+    e.currentTarget.textContent = "Saving…";
+    if (mock) {
+      mock.logCheckin?.(area, level);
+      S.dashboard = mock.dashboard();
+    } else {
+      await fetch("/api/checkin", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ area, level }),
+      }).catch(() => {});
+      await loadDashboard();
+    }
+    showToast("Logged. Thanks — that's what makes the trend real.", "ok");
+    render();
   });
 
   $("#insightsToLearn", wrap)?.addEventListener("click", () => {

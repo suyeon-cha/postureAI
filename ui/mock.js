@@ -139,6 +139,30 @@ function rng(seed) {
   return () => ((s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
 }
 
+
+/** Seeded check-in history. Deliberately shows a mild downward drift and gaps
+ *  on some days — a perfectly logged, perfectly improving series would look
+ *  fabricated, because it would be. */
+function seededCheckins() {
+  const r = rng(19);
+  const areas = ["neck_shoulders", "back_hips", "legs_glutes", "wrists_hands", "tired_eyes"];
+  const out = [];
+  for (let i = 20; i >= 0; i--) {
+    if (r() < 0.25) continue;                       // days people forget
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    d.setHours(9 + Math.floor(r() * 8), 0, 0, 0);
+    const drift = 3.6 - (20 - i) * 0.03;            // slow easing over the window
+    const level = Math.max(1, Math.min(5, Math.round(drift + (r() - 0.5) * 1.4)));
+    out.push({
+      logged_at: d.toISOString().slice(0, 19),
+      area: areas[Math.floor(r() * areas.length)],
+      level,
+    });
+  }
+  return out;
+}
+
 function seededHistory() {
   const r = rng(7);
   const symptoms = Object.keys(BY_SYMPTOM).slice(0, 4);
@@ -172,6 +196,7 @@ export class MockBackend {
   constructor(onMessage) {
     this.onMessage = onMessage;
     this.sessions = seededHistory();
+    this.checkinLog = seededCheckins();
     this.prefs = {
       goal: "reduce_stiffness",
       common_areas: ["neck_shoulders"],
@@ -494,6 +519,83 @@ export class MockBackend {
     };
   }
 
+
+  /** Mirrors memory.wellbeing_score(): one number with its parts shown. */
+
+  /** Daily completion counts for the consistency grid. */
+  _calendar(days) {
+    const out = [];
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const key = d.toISOString().slice(0, 10);
+      const rows = this.sessions.filter((s) => s.started_at.slice(0, 10) === key);
+      out.push({
+        date: key,
+        label: d.toLocaleDateString(undefined, { weekday: "short" }),
+        completed: rows.filter((s) => s.completed).length,
+        started: rows.length,
+      });
+    }
+    return out;
+  }
+
+  _score() {
+    const s = this._summary();
+    const pr = this._practice();
+    const parts = [
+      ["consistency", "Consistency", 35, "Resets completed across the week",
+       Math.min(s.sessions_completed / 5, 1)],
+      ["relief", "Relief", 30, "How often a reset left you feeling better",
+       Object.values(s.responses).reduce((a, b) => a + b, 0) ? s.better_rate : 0],
+      ["coverage", "Coverage", 20, "Different body areas you've addressed",
+       Math.min(Object.keys(s.by_symptom).length / 3, 1)],
+      ["follow_through", "Follow-through", 15, "Resets you started and finished",
+       s.completion_rate],
+    ].map(([key, label, weight, why, v]) => ({
+      key, label, weight, why, earned: Math.round(v * weight), pct: Math.round(v * 100),
+    }));
+    const score = parts.reduce((a, p) => a + p.earned, 0);
+    return {
+      score, band: score < 40 ? "Building" : score < 70 ? "Steady" : "Strong",
+      days: 7, parts, has_data: s.sessions_started > 0,
+      focus: parts.reduce((a, b) => (b.pct < a.pct ? b : a)),
+      practised_moves: pr.distinct_moves,
+    };
+  }
+
+  /** Mirrors memory.checkins(): user-entered body reads plus the comparison. */
+  _checkins() {
+    const levels = { 1: "Easy", 2: "Fine", 3: "Noticeable", 4: "Sore", 5: "Rough" };
+    const resetDays = new Set(
+      this.sessions.filter((s) => s.completed).map((s) => s.started_at.slice(0, 10)));
+    const byDay = {};
+    this.checkinLog.forEach((c) => {
+      (byDay[c.logged_at.slice(0, 10)] ||= []).push(c.level);
+    });
+    const mean = (xs) => (xs.length ? +(xs.reduce((a, b) => a + b, 0) / xs.length).toFixed(2) : null);
+    const on = [], off = [];
+    Object.entries(byDay).forEach(([d, lv]) =>
+      (resetDays.has(d) ? on : off).push(...lv));
+    const today = new Date().toISOString().slice(0, 10);
+    return {
+      days: 30, levels, count: this.checkinLog.length,
+      latest: this.checkinLog[this.checkinLog.length - 1] || null,
+      logged_today: Object.keys(byDay).includes(today),
+      trend: Object.keys(byDay).sort().map((d) =>
+        ({ date: d, level: mean(byDay[d]), reset: resetDays.has(d) })),
+      average: mean(Object.values(byDay).flat()),
+      by_area: {},
+      on_reset_days: mean(on), off_reset_days: mean(off),
+    };
+  }
+
+  logCheckin(area, level) {
+    this.checkinLog.push({
+      logged_at: new Date().toISOString().slice(0, 19), area, level: +level,
+    });
+  }
+
   dashboard() {
     const daily = [];
     for (let i = 6; i >= 0; i--) {
@@ -513,6 +615,9 @@ export class MockBackend {
       daily,
       recent: [...this.sessions].reverse().slice(0, 8),
       practice: this._practice(),
+      score: this._score(),
+      calendar: this._calendar(35),
+      checkins: this._checkins(),
       symptom_labels: LABELS,
     };
   }
