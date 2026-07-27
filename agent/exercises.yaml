@@ -232,7 +232,11 @@ calf_raise:
 glute_squeeze:
   name: "Seated glute squeeze"
   targets: [glutes, sitting]
-  detection: reps
+  # timer_only, not reps: a glute contraction moves no landmark the camera can
+  # see. Counting it from torso lean was counting noise. Seated work below the
+  # torso frame is coached by voice and timer, never by pose.
+  detection: timer_only
+  hold_seconds: 3
   target_reps: 10
   seconds: 35
   seated_ok: true
@@ -246,7 +250,9 @@ glute_squeeze:
 figure_four:
   name: "Seated figure-four"
   targets: [glutes, hips, pelvis]
-  detection: angle_hold
+  # timer_only for the same reason: the crossed ankle sits below the torso
+  # frame, so there is nothing to measure while seated.
+  detection: timer_only
   hold_seconds: 25
   sides: 2
   seconds: 60

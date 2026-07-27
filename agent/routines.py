@@ -245,6 +245,33 @@ def compose(
     }
 
 
+#: Targets that live below the torso frame.
+_LOWER_BODY = {"legs", "glutes", "hips", "pelvis"}
+#: Detection modes that require pose landmarks.
+_POSE_DETECTION = {"reps", "angle_hold", "tempo", "vlm_judge"}
+
+
+def audit_library() -> list[str]:
+    """Structural rule: a seated move may not claim pose detection of the lower
+    body. There are exactly two camera modes — full body, or the upper half of
+    a seated person — so a seated move that works the legs has nothing visible
+    to measure, and any rep it reports is invented.
+
+    Such a move must be `timer_only`: coached by voice and countdown, honestly.
+    Returns a list of violations; empty means the library is coherent.
+    """
+    problems = []
+    for key, move in load_library().items():
+        seated_only = move.get("seated_ok", True) and not move.get("requires_full_body")
+        lower = _LOWER_BODY & set(move.get("targets", []))
+        if seated_only and lower and move.get("detection") in _POSE_DETECTION:
+            problems.append(
+                f"{key}: seated but claims {move['detection']} detection of "
+                f"{sorted(lower)} — not visible in the torso frame; use timer_only"
+            )
+    return problems
+
+
 def validate(moves: list[str]) -> list[str]:
     """Drop anything the model invented. Returns only approved keys."""
     lib = load_library()

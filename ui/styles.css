@@ -1006,3 +1006,49 @@ tr[data-live="true"] td { background: var(--accent-soft); }
   margin-left: 10px; font-size: 0.74rem; color: var(--ink-3);
   border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px;
 }
+
+/* ── movement guide, embedded in the camera frame ──
+   A ghost figure the user mirrors, not a diagram beside the video. Sits above
+   the pose skeleton but below the framing outline, and never intercepts
+   clicks. */
+.guide-ghost {
+  position: absolute; inset: 0; z-index: 2;
+  display: grid; place-items: center; padding: 6% 6% 22%;
+  pointer-events: none; opacity: 0.42;
+  transition: opacity 0.25s ease;
+}
+.guide-ghost svg { width: auto; height: 100%; max-width: 100%; }
+.cam-wrap[data-guide="off"] .guide-ghost,
+.cam-wrap[data-guide="off"] .guide-caption { opacity: 0; }
+
+.guide-caption {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 3;
+  padding: 34px 16px 14px;
+  background: linear-gradient(to top, rgba(12, 10, 16, 0.88), transparent);
+  color: #fff; pointer-events: none; transition: opacity 0.25s ease;
+}
+.guide-caption-move {
+  display: inline-block; font-size: 0.72rem; letter-spacing: 0.06em;
+  text-transform: uppercase; opacity: 0.75; margin-bottom: 3px;
+}
+.guide-caption p { font-size: 0.9rem; line-height: 1.45; }
+.guide-caption-during { opacity: 0.78; font-size: 0.83rem; }
+
+.guide-toggle {
+  position: absolute; right: 10px; top: 10px; z-index: 4;
+  background: rgba(20, 18, 16, 0.72); color: #fff; border: 0;
+  border-radius: 999px; padding: 5px 13px; font-size: 0.74rem;
+  backdrop-filter: blur(6px);
+}
+.guide-toggle[aria-pressed="false"] { opacity: 0.55; }
+
+/* The camera panel is now the main stage, so give it room to breathe. */
+.cam-wrap { min-height: 320px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .guide-ghost, .guide-caption { transition: none; }
+}
+
+/* The caption now owns the bottom of the frame, so the privacy flag moves to
+   the top-left rather than sitting on top of the movement instruction. */
+.cam-flag { top: 10px; bottom: auto; }

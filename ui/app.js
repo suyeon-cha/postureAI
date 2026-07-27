@@ -1126,25 +1126,6 @@ function viewSession() {
           </button>
         </div>
 
-        <section class="movement-guide-card" aria-labelledby="guideTitle">
-          <div class="movement-guide-head">
-            <div>
-              <span class="eyebrow">Movement guide</span>
-              <h2 id="guideTitle">Follow the example</h2>
-            </div>
-            <span class="pill info" id="guideMove">Getting ready…</span>
-          </div>
-          <div id="movementGuide" class="movement-guide-stage">
-            ${movementGuideMarkup(null)}
-          </div>
-          <div class="movement-guide-copy">
-            <span>Set up</span>
-            <p id="guideSetup">Get into a comfortable starting position.</p>
-            <span>Move</span>
-            <p id="guideDuring">Move slowly and stay within a comfortable range.</p>
-          </div>
-        </section>
-
         <div class="video-status" id="videoStatus" data-state="${S.cameraOn ? "scanning" : "off"}">
           <span class="video-status-dot"></span>
           <div><strong>${S.cameraOn ? "Video AI is finding your position" : "Video AI is off"}</strong>
@@ -1154,6 +1135,19 @@ function viewSession() {
         <div class="cam-wrap" id="camWrap">
           <video id="cam" autoplay muted playsinline></video>
           <canvas id="overlay"></canvas>
+          <!-- The movement guide lives *inside* the camera frame: a ghost
+               figure the user lines themselves up against and mirrors. Side by
+               side it was a diagram to glance at; on top it is a target. -->
+          <div id="movementGuide" class="guide-ghost" data-mode="overlay" aria-hidden="true">
+            ${movementGuideMarkup(null)}
+          </div>
+          <div class="guide-caption" id="guideCaption">
+            <span class="guide-caption-move" id="guideMove">Getting ready…</span>
+            <p id="guideSetup">Get into a comfortable starting position.</p>
+            <p id="guideDuring" class="guide-caption-during"></p>
+          </div>
+          <button class="guide-toggle" id="guideToggle" aria-pressed="true"
+            title="Show or hide the movement guide">Guide</button>
           <div class="cam-off" id="camOff" ${S.cameraOn ? "hidden" : ""}>
             <strong>Camera is off</strong>
             <p class="small muted">Use the animated movement guide above with text and
@@ -1203,6 +1197,12 @@ function viewSession() {
   $("#skip", wrap).addEventListener("click", () => send({ type: "skip" }));
   $("#stop", wrap).addEventListener("click", () => finishSession(false));
   $("#camToggle", wrap).addEventListener("click", toggleCamera);
+  // Some people want to see themselves unobstructed once they know the move.
+  $("#guideToggle", wrap).addEventListener("click", (e) => {
+    S.guideHidden = !S.guideHidden;
+    e.currentTarget.setAttribute("aria-pressed", String(!S.guideHidden));
+    $("#camWrap", wrap).dataset.guide = S.guideHidden ? "off" : "on";
+  });
   // Confirming position restarts the move's tracker, so reps are counted from
   // where the user actually began — not from the seconds they spent walking
   // into frame, which otherwise show up as a phantom rep and a "too fast" cue.
