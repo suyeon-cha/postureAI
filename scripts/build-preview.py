@@ -28,7 +28,7 @@ UI = Path(__file__).parent.parent / "ui"
 # handed to the next module, so the modules keep their own `el`/`esc` helpers
 # without colliding.
 MODULES = [
-    ("overlay.js", ["SKELETON_EDGES", "drawSkeleton"]),
+    ("overlay.js", ["SKELETON_EDGES", "drawSkeleton", "drawFrameGuide"]),
     ("charts.js", ["dayBars", "responseSplit", "areaBars"]),
     ("mock.js", ["MockBackend"]),
 ]
@@ -59,7 +59,7 @@ def build(fragment: bool = False) -> str:
     app = strip_module_syntax((UI / "app.js").read_text())
     parts.append(
         "/* ── app.js ── */\n{\n"
-        "  const { SKELETON_EDGES, drawSkeleton } = __exports;\n"
+        "  const { SKELETON_EDGES, drawSkeleton, drawFrameGuide } = __exports;\n"
         "  const charts = {\n"
         "    dayBars: __exports.dayBars,\n"
         "    responseSplit: __exports.responseSplit,\n"

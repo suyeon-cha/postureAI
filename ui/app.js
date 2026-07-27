@@ -48,11 +48,16 @@ const MOVE_MOTIONS = {
   shoulder_rolls: "shoulder-roll",
   trap_stretch: "trap-stretch",
   chest_opener: "chest-open",
+  y_raise: "y-raise",
   chin_tuck: "chin-tuck",
   seated_twist: "seated-twist",
   cat_cow: "cat-cow",
+  thoracic_extension: "cat-cow",
   hip_flexor_reset: "lunge",
   standing_forward_fold: "forward-fold",
+  hip_circles: "hip-circles",
+  squat: "squat",
+  calf_raise: "calf-raise",
   wrist_stretch: "wrist-stretch",
   wrist_prayer: "prayer",
   finger_fan: "finger-fan",
@@ -126,6 +131,7 @@ const FORCE_PREVIEW =
 const NAV = [
   { key: "home", label: "Reset" },
   { key: "dashboard", label: "My insights" },
+  { key: "knowledge", label: "Learn" },
 ];
 const CONSENT_VERSION = "2026-07-26-v1";
 
@@ -144,8 +150,6 @@ const S = {
     coach_style: "supportive",
     voice: true,
     watch_mode: false,
-    workspace_opt_in: false,
-    team: "Engineering",
   },
   // `touched` records which constraints the user actually set. Untouched chips
   // are defaults, not instructions, so they must not override what the user
@@ -158,11 +162,12 @@ const S = {
   live: null, // latest `state.session`
   keypoints: [],
   framing: "no_person",
+  frame: null,
+  frameConfirmed: false,
   cameraOn: false,
   cameraError: null,
   planning: false,
   dashboard: null,
-  workspace: null,
   knowledge: null,
   routines: null,
   trace: [],
@@ -241,7 +246,6 @@ async function boot() {
     mock = new MockBackend(handle);
     S.health = mock.health();
     S.dashboard = mock.dashboard();
-    S.workspace = mock.workspace();
     S.knowledge = mock.knowledge();
     S.routines = mock.routines();
   }
@@ -494,7 +498,6 @@ function appendTrace(entry) {
 }
 
 function go(screen) {
-  if (screen === "workspace" && !S.workspace) loadWorkspace();
   if (screen === "dashboard" && !S.dashboard) loadDashboard();
   if (screen === "knowledge" && !S.knowledge) loadKnowledge();
   S.screen = screen;
@@ -504,12 +507,6 @@ function go(screen) {
 async function loadDashboard() {
   if (mock) { S.dashboard = mock.dashboard(); return; }
   S.dashboard = await fetch("/api/dashboard").then((r) => r.json()).catch(() => null);
-}
-
-async function loadWorkspace() {
-  if (mock) { S.workspace = mock.workspace(); render(); return; }
-  S.workspace = await fetch("/api/workspace").then((r) => r.json()).catch(() => null);
-  render();
 }
 
 async function loadKnowledge() {
@@ -538,7 +535,6 @@ function render() {
     escalate: viewEscalate,
     dashboard: viewDashboard,
     knowledge: viewKnowledge,
-    workspace: viewWorkspace,
     settings: viewSettings,
     privacy: viewPrivacy,
     safety: viewSafety,
@@ -685,8 +681,8 @@ function viewConsent() {
           personalize future suggestions, and show your private insights.</span></div>
       </div>
       <div class="notice small"><strong>No sale, advertising, or individual employer access.</strong>
-        No external AI API receives this data. Optional employer reporting is off by default
-        and contains aggregate participation totals only for groups of 10 or more.</div>
+        No external AI API receives this data, and this employee app has no employer
+        dashboard or workplace-sharing control.</div>
       <label class="consent-check">
         <input type="checkbox" id="healthConsent">
         <span><strong>I am 18 or older and agree to this local collection and use.</strong>
@@ -1666,57 +1662,224 @@ function viewDashboard() {
   return wrap;
 }
 
+const LIBRARY_AREAS = [
+  "neck_shoulders",
+  "back_hips",
+  "legs_glutes",
+  "wrists_hands",
+  "tired_eyes",
+  "general",
+];
+
+function libraryAreaForMove(move, key = "") {
+  if (key === "box_breath") return "general";
+  if (key === "squat") return "legs_glutes";
+  const targets = new Set(move?.targets || []);
+  if (targets.has("eyes")) return "tired_eyes";
+  if (targets.has("wrists")) return "wrists_hands";
+  if (targets.has("glutes") || targets.has("legs") || targets.has("pelvis")) return "legs_glutes";
+  if (targets.has("hips") || targets.has("sitting")) return "back_hips";
+  if (targets.has("neck") || targets.has("shoulders")) return "neck_shoulders";
+  if (targets.has("back")) return "back_hips";
+  return "general";
+}
+
+function libraryIcon(area) {
+  return {
+    neck_shoulders: "↘",
+    back_hips: "⌁",
+    legs_glutes: "◇",
+    wrists_hands: "✦",
+    tired_eyes: "◉",
+    general: "○",
+  }[area] || "○";
+}
+
 function viewKnowledge() {
   const kb = S.knowledge;
   if (!kb) {
     loadKnowledge();
     return el(`<div class="notice">Loading the approved wellness library…</div>`);
   }
+
+  const labels = S.routines?.symptoms || {};
+  const topics = kb.topics || [];
+  const topicByArea = Object.fromEntries(topics.map((topic) => [topic.area, topic]));
+  const moves = Object.entries(S.routines?.moves || {}).map(([key, move]) => ({
+    key,
+    ...move,
+    area: libraryAreaForMove(move, key),
+  }));
+  const areas = LIBRARY_AREAS.filter((area) =>
+    topics.some((topic) => topic.area === area) || moves.some((move) => move.area === area)
+  );
+
   const wrap = el(`<div class="stack">
     <div class="library-hero card">
       <div class="stack-sm">
-        <div class="row"><span class="pill good">Approved MVP content</span>
-          <span class="pill">Version ${esc(kb.version)}</span>
-          <span class="pill">Reviewed ${esc(kb.reviewed_at)}</span></div>
-        <h1>Employee wellness library</h1>
-        <p class="hero-lede">This is the source-grounded content FlowReset retrieves when it
-          explains a recommendation. Personal employee history is stored separately and is
-          never added to this shared library.</p>
+        <div class="row"><span class="pill good">Approved wellness content</span>
+          <span class="pill">${moves.length} exercise guides</span>
+          <span class="pill">${areas.length} desk-work topics</span></div>
+        <h1>Learn what helps during a desk day</h1>
+        <p class="hero-lede">Understand common desk-work discomfort, explore the movements
+          FlowReset can recommend, and review the same setup and form cues used by your
+          local coach.</p>
         <div class="row">
-          <a class="btn secondary link-btn"
-            href="https://github.com/suyeon-cha/postureAI/blob/feat/flowreset-app/FLOWRESET_KNOWLEDGE_BASE.md"
-            target="_blank" rel="noreferrer">Read the governance specification ↗</a>
+          <button class="btn" id="libraryReset">Start a reset</button>
+          <span class="tiny muted">Reviewed ${esc(kb.reviewed_at)} · Version ${esc(kb.version)}</span>
         </div>
       </div>
-      <div class="library-boundary"><span class="eyebrow">Product boundary</span>
-        <strong>${esc(kb.audience)}</strong><p class="small">${esc(kb.boundary)}</p></div>
-    </div>
-
-    <div class="grid library-grid">
-      ${kb.topics.map((topic) => `<article class="card library-topic stack-sm">
-        <div class="row"><span class="library-icon">${topic.area === "tired_eyes" ? "◉" :
-          topic.area === "wrists_hands" ? "⌁" : "◇"}</span>
-          <div><span class="eyebrow">${esc(topic.camera.mode)}</span>
-            <h2>${esc(topic.title)}</h2></div></div>
-        <p class="small muted">${esc(topic.rationale)}</p>
-        <details><summary>What video AI checks</summary>
-          <ul>${topic.camera.checks.map((check) => `<li>${esc(check)}</li>`).join("")}</ul>
-          <p class="tiny muted">${esc(topic.camera.limitation)}</p></details>
-        <div class="topic-sources">${topic.sources.map((source) =>
-          `<a href="${esc(source.url)}" target="_blank" rel="noreferrer">
-            ${esc(source.organization)} · ${esc(source.title)} ↗</a>`).join("")}</div>
-      </article>`).join("")}
-    </div>
-
-    <div class="card privacy-architecture">
-      <div class="stack-sm"><span class="eyebrow">Local data architecture</span>
-        <h2>${esc(kb.privacy.title)}</h2><p class="small muted">${esc(kb.privacy.rationale)}</p></div>
-      <div class="retention-grid">
-        ${Object.entries(kb.privacy.retention).map(([key, value]) =>
-          `<div><span>${esc(key.replace(/_/g, " "))}</span><strong>${esc(value)}</strong></div>`).join("")}
+      <div class="library-boundary">
+        <span class="eyebrow">Use this library for</span>
+        <strong>Education and general wellness</strong>
+        <p class="small">${esc(kb.boundary)}</p>
+        <p class="tiny muted">The camera can observe broad movement signals; it cannot
+          diagnose pain, injury, posture disorders, or vision conditions.</p>
       </div>
     </div>
+
+    <section class="stack library-section" aria-labelledby="topicsTitle">
+      <div class="library-section-head">
+        <div class="stack-sm">
+          <span class="eyebrow">Explore by need</span>
+          <h2 id="topicsTitle">Common desk-work concerns</h2>
+        </div>
+        <p class="small muted">Choose a topic to see relevant exercise guides.</p>
+      </div>
+      <div class="grid library-grid">
+        ${areas.map((area) => {
+          const topic = topicByArea[area];
+          if (!topic) return "";
+          return `<article class="card library-topic stack-sm">
+            <div class="row"><span class="library-icon">${libraryIcon(area)}</span>
+              <div><span class="eyebrow">${esc(labels[area] || area.replace(/_/g, " "))}</span>
+                <h3>${esc(topic.title)}</h3></div></div>
+            <p class="small muted">${esc(topic.rationale)}</p>
+            <div class="row library-topic-actions">
+              <button class="btn secondary" data-library-filter="${esc(area)}">View exercises</button>
+              <button class="btn subtle" data-library-start="${esc(area)}">Build a reset</button>
+            </div>
+            <details><summary>Evidence and camera limits</summary>
+              <p class="tiny muted"><strong>Camera can check:</strong>
+                ${esc((topic.camera?.checks || []).join(" · "))}</p>
+              <p class="tiny muted">${esc(topic.camera?.limitation || "")}</p>
+              <div class="topic-sources">${(topic.sources || []).map((source) =>
+                `<a href="${esc(source.url)}" target="_blank" rel="noreferrer">
+                  ${esc(source.organization)} · ${esc(source.title)} ↗</a>`).join("")}</div>
+            </details>
+          </article>`;
+        }).join("")}
+      </div>
+    </section>
+
+    <section class="stack library-section" id="exerciseLibrary" aria-labelledby="exercisesTitle">
+      <div class="library-section-head">
+        <div class="stack-sm">
+          <span class="eyebrow">Approved movement catalog</span>
+          <h2 id="exercisesTitle">Exercise guides</h2>
+          <p class="small muted">These are the only movements the agent can select. It cannot
+            invent a new exercise or replace the reviewed coaching language.</p>
+        </div>
+        <label class="library-search">
+          <span class="tiny">Search exercises</span>
+          <input id="librarySearch" type="search" placeholder="Try “wrist”, “eyes”, or “seated”">
+        </label>
+      </div>
+      <div class="library-filters" id="libraryFilters" aria-label="Filter exercise guides">
+        <button class="chip" data-area="all" aria-pressed="true">All</button>
+        ${areas.map((area) => `<button class="chip" data-area="${esc(area)}" aria-pressed="false">
+          ${esc(labels[area] || area.replace(/_/g, " "))}</button>`).join("")}
+      </div>
+      <p class="small muted" id="libraryCount" aria-live="polite">${moves.length} exercises</p>
+      <div class="exercise-library-grid" id="exerciseCards">
+        ${moves.map((move) => {
+          const search = [move.name, move.area, ...(move.targets || []), move.cues?.setup, move.cues?.during]
+            .filter(Boolean).join(" ").toLowerCase();
+          return `<article class="card exercise-guide-card stack-sm"
+            data-area="${esc(move.area)}" data-search="${esc(search)}">
+            <div class="exercise-guide-head">
+              <span class="library-icon">${libraryIcon(move.area)}</span>
+              <div><h3>${esc(move.name || move.key.replace(/_/g, " "))}</h3>
+                <div class="row">
+                  <span class="pill">${esc(move.seconds || "—")} sec</span>
+                  <span class="pill">${move.seated_ok === false ? "Standing" : "Seated option"}</span>
+                  <span class="pill">${esc(move.intensity || "gentle")}</span>
+                </div></div>
+            </div>
+            <p class="exercise-targets">For: ${esc((move.targets || []).join(" · "))}</p>
+            <div class="exercise-instruction">
+              <span>Set up</span><p>${esc(move.cues?.setup || "Follow the coach's setup cue.")}</p>
+            </div>
+            <div class="exercise-instruction">
+              <span>Focus on</span><p>${esc(move.cues?.during || "Move slowly in a comfortable range.")}</p>
+            </div>
+          </article>`;
+        }).join("")}
+      </div>
+      <div class="notice small" id="libraryEmpty" hidden>
+        <strong>No exercise guides match that search.</strong>
+        Try a body area such as neck, hips, wrists, eyes, or glutes.
+      </div>
+    </section>
+
+    <details class="card library-governance">
+      <summary><span><strong>How this educational content is governed</strong>
+        <small>Sources, review status, and local-agent boundaries</small></span></summary>
+      <div class="grid cols-3">
+        <div><span class="eyebrow">Source-grounded</span>
+          <p class="small muted">Each topic links to the organization and resource used
+            for the general-wellness rationale.</p></div>
+        <div><span class="eyebrow">Approved actions only</span>
+          <p class="small muted">The agent chooses from this catalog. Exercise setup and
+            safety cues are authored in the knowledge base.</p></div>
+        <div><span class="eyebrow">Local and separate</span>
+          <p class="small muted">Your personal history is not added to the shared content
+            library. Camera frames remain session-only.</p></div>
+      </div>
+    </details>
   </div>`);
+
+  const cards = [...wrap.querySelectorAll(".exercise-guide-card")];
+  const filters = [...wrap.querySelectorAll("#libraryFilters [data-area]")];
+  const search = $("#librarySearch", wrap);
+  const count = $("#libraryCount", wrap);
+  const empty = $("#libraryEmpty", wrap);
+  let activeArea = "all";
+
+  const applyLibraryFilter = () => {
+    const query = search.value.trim().toLowerCase();
+    let visible = 0;
+    cards.forEach((card) => {
+      const areaMatch = activeArea === "all" || card.dataset.area === activeArea;
+      const searchMatch = !query || card.dataset.search.includes(query);
+      card.hidden = !(areaMatch && searchMatch);
+      if (!card.hidden) visible += 1;
+    });
+    count.textContent = `${visible} ${visible === 1 ? "exercise" : "exercises"}`;
+    empty.hidden = visible !== 0;
+  };
+
+  const setArea = (area, scroll = false) => {
+    activeArea = area;
+    filters.forEach((button) =>
+      button.setAttribute("aria-pressed", String(button.dataset.area === area)));
+    applyLibraryFilter();
+    if (scroll) $("#exerciseLibrary", wrap).scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  filters.forEach((button) =>
+    button.addEventListener("click", () => setArea(button.dataset.area)));
+  wrap.querySelectorAll("[data-library-filter]").forEach((button) =>
+    button.addEventListener("click", () => setArea(button.dataset.libraryFilter, true)));
+  wrap.querySelectorAll("[data-library-start]").forEach((button) =>
+    button.addEventListener("click", () => {
+      S.intake.symptom = button.dataset.libraryStart;
+      S.intake.touched.symptom = true;
+      go("home");
+    }));
+  search.addEventListener("input", applyLibraryFilter);
+  $("#libraryReset", wrap).addEventListener("click", () => go("home"));
+
   return wrap;
 }
 
@@ -1771,8 +1934,8 @@ function viewHelp() {
       <section class="card stack-sm">
         <h2>Privacy controls</h2>
         <p class="small muted">Camera guidance is optional. Raw frames are processed in
-          memory on the GB10 and discarded. Employer reporting contains opted-in aggregate
-          totals only for groups of at least 10.</p>
+          memory on the GB10 and discarded. The employee app does not expose a workplace
+          dashboard or share your session history.</p>
         <button class="btn secondary" id="helpSettings">Open privacy settings</button>
       </section>
 
@@ -1799,64 +1962,13 @@ function viewHelp() {
   return wrap;
 }
 
-function viewWorkspace() {
-  const payload = S.workspace;
-  if (!payload) { loadWorkspace(); return el(`<div class="notice">Loading workspace view…</div>`); }
-  const w = payload.workspace;
-
-  if (w.suppressed) {
-    return el(`<div class="stack">
-      <h1>Workspace</h1>
-      <div class="notice"><strong>Nothing to report yet.</strong>
-        <p class="small" style="margin-top:6px">${esc(w.reason)}</p>
-        <p class="small muted" style="margin-top:6px">${w.participants} of ${w.k_anonymity} needed.</p></div>
-    </div>`);
-  }
-
-  const wrap = el(`<div class="stack">
-    <div class="stack-sm">
-      <div class="row"><h1>Workspace</h1><span class="pill info" style="margin-left:auto">People Ops view</span></div>
-      <p class="muted">Aggregate engagement for people who opted in. Last ${w.days} days.</p>
-    </div>
-
-    <div class="notice small">
-      <strong>What a manager can and cannot see.</strong>
-      No individual is identifiable here: every figure is a count over a cohort of at least
-      ${w.k_anonymity} opted-in people, and any team below that floor is suppressed entirely
-      ${w.suppressed_teams ? ` (${w.suppressed_teams} ${w.suppressed_teams === 1 ? "team is" : "teams are"} hidden for that reason)` : ""}.
-      There is no per-person view, no video, no discomfort detail, and no way to request one —
-      the aggregation happens in the query, not in the interface.
-    </div>
-
-    <div class="grid stat-row">
-      <div class="card stat"><div class="num">${w.participants}</div><div class="lbl">people opted in</div></div>
-      <div class="card stat"><div class="num">${w.per_person_per_week}</div><div class="lbl">resets per person per week</div></div>
-      <div class="card stat"><div class="num">${Math.round(w.completion_rate * 100)}%</div><div class="lbl">completion rate</div></div>
-    </div>
-
-    <div class="card stack">
-      <h2>By team</h2>
-      <div class="table-scroll"><table>
-        <thead><tr><th>Team</th><th>Opted in</th><th>Resets</th><th>Per person / week</th><th>Completion</th></tr></thead>
-        <tbody id="rows"></tbody>
-      </table></div>
-      ${w.suppressed_teams ? `<p class="tiny muted">${w.suppressed_teams} team(s) hidden:
-        fewer than ${w.k_anonymity} people opted in.</p>` : ""}
-    </div>
-  </div>`);
-
-  (w.teams || []).forEach((t) => {
-    $("#rows", wrap).append(el(`<tr>
-      <td><strong>${esc(t.team)}</strong></td><td>${t.participants}</td><td>${t.sessions}</td>
-      <td>${t.per_person_per_week}</td><td>${Math.round(t.completion_rate * 100)}%</td></tr>`));
-  });
-  return wrap;
-}
-
 function viewSettings() {
   const h = S.health;
   const wrap = el(`<div class="stack">
-    <h1>Settings</h1>
+    <div class="row settings-title">
+      <div class="stack-sm"><span class="eyebrow">Personal controls</span><h1>Settings</h1></div>
+      <button class="btn secondary" id="helpCenter">Help &amp; safety</button>
+    </div>
 
     <div class="card stack">
       <h2>Coaching</h2>
@@ -1878,11 +1990,6 @@ function viewSettings() {
         and neck time and <em>offers</em> a reset — it never starts one, and it stops asking if
         you decline. Turning it off clears what it accumulated.</span></div>
         <button class="toggle" id="watch" aria-pressed="${S.prefs.watch_mode}" aria-label="Watch mode"></button></div>
-      <div class="switch"><div class="txt"><strong>Share anonymous totals with my workspace</strong>
-        <span class="small muted">Optional and off by default. Sends aggregate participation
-        counts only inside a cohort of 10+ people—never video, concerns, body areas,
-        responses, or individual sessions.</span></div>
-        <button class="toggle" id="ws" aria-pressed="${S.prefs.workspace_opt_in}" aria-label="Workspace sharing"></button></div>
       <div class="row">
         <button class="btn secondary" id="export">Export my data</button>
         <button class="btn subtle" id="wipe" style="color:var(--rose)">Delete all my local data</button>
@@ -1947,18 +2054,9 @@ function viewSettings() {
   };
   toggle("voice", "voice");
   toggle("watch", "watch_mode", (on) => send({ type: "watch_mode", on }));
-  $("#ws", wrap).addEventListener("click", () => {
-    const turningOn = !S.prefs.workspace_opt_in;
-    if (turningOn && !confirm(
-      "Share aggregate participation counts with the employer wellness administrator? " +
-      "This is optional. Personal concerns, body areas, responses, and sessions are excluded."
-    )) return;
-    S.prefs.workspace_opt_in = turningOn;
-    $("#ws", wrap).setAttribute("aria-pressed", String(turningOn));
-    savePrefs();
-  });
 
   $("#privacyCenter", wrap).addEventListener("click", () => { S.returnTo = "settings"; go("privacy"); });
+  $("#helpCenter", wrap).addEventListener("click", () => go("help"));
   $("#export", wrap).addEventListener("click", exportMyData);
   $("#wipe", wrap).addEventListener("click", deleteMyData);
   $("#withdraw", wrap).addEventListener("click", withdrawHealthConsent);
@@ -1994,7 +2092,7 @@ async function deleteMyData() {
   if (!confirm("Delete all local preferences and session history? This cannot be undone.")) return;
   if (mock) {
     mock.sessions = [];
-    mock.prefs = { ...mock.prefs, workspace_opt_in: false, concerns: "" };
+    mock.prefs = { ...mock.prefs, concerns: "" };
   } else {
     const response = await fetch("/api/history", { method: "DELETE" }).catch(() => null);
     if (!response?.ok) {
@@ -2010,7 +2108,6 @@ async function deleteMyData() {
   S.healthConsent = false;
   S.healthConsentAt = null;
   S.dashboard = null;
-  S.prefs.workspace_opt_in = false;
   showToast("Your local preferences and session history were deleted.", "status");
   go("welcome");
 }
@@ -2022,7 +2119,6 @@ function withdrawHealthConsent() {
   )) return;
   S.healthConsent = false;
   S.healthConsentAt = null;
-  S.prefs.workspace_opt_in = false;
   S.prefs.watch_mode = false;
   localStorage.removeItem("flowreset.healthDataConsent");
   localStorage.removeItem("flowreset.healthDataConsentVersion");
@@ -2076,13 +2172,11 @@ function viewPrivacy() {
           <li>No advertising, data broker, or sale of consumer health data.</li>
           <li>Your employer cannot see individual concerns, body areas, responses,
             sessions, camera, voice, or video.</li>
-          <li>Optional employer reporting is off by default and limited to aggregate
-            participation counts for cohorts of at least 10.</li>
+          <li>The employee app has no employer dashboard or workplace-sharing control.</li>
         </ul></section>
       <section class="card stack-sm"><h2>Your controls</h2>
         <ul class="policy-list">
           <li>Camera permission is requested separately for each session.</li>
-          <li>Workspace aggregation requires separate opt-in.</li>
           <li>Export a readable copy of preferences and session history.</li>
           <li>Delete all local data or withdraw consent for future collection.</li>
         </ul>
@@ -2142,8 +2236,8 @@ function viewSafety() {
           occlusion, pain, mobility limits, and conditions that are not visible.</span></div>
         <div><strong>No guaranteed outcome</strong><span>A completed reset or positive
           score does not prove that a movement is safe or effective for you.</span></div>
-        <div><strong>Your choice</strong><span>Participation, camera use, and employer
-          aggregation are voluntary. Seated and timer-only alternatives are available.</span></div>
+        <div><strong>Your choice</strong><span>Participation and camera use are voluntary.
+          Seated and timer-only alternatives are available.</span></div>
       </div>
     </section>
   </div>`);

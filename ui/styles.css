@@ -127,6 +127,7 @@ button { font: inherit; cursor: pointer; }
 .settings-shortcut:hover,
 .settings-shortcut[aria-current="page"] { background: var(--surface-2); color: var(--ink); }
 .settings-shortcut:disabled { opacity: 0.42; cursor: not-allowed; }
+.settings-title { justify-content: space-between; }
 
 .status {
   display: flex; align-items: center; gap: 8px;
@@ -579,6 +580,8 @@ textarea::placeholder { color: var(--ink-3); }
 .motion-chest-open .guide-arm-left { transform-origin: 100% 0%; animation: guide-open-left 2.7s ease-in-out infinite; }
 .motion-chest-open .guide-arm-right { transform-origin: 0% 0%; animation: guide-open-right 2.7s ease-in-out infinite; }
 .motion-chest-open .guide-shoulders { animation: guide-chest 2.7s ease-in-out infinite; }
+.motion-y-raise .guide-arm-left { transform-origin: 100% 0%; animation: guide-y-left 2.7s ease-in-out infinite; }
+.motion-y-raise .guide-arm-right { transform-origin: 0% 0%; animation: guide-y-right 2.7s ease-in-out infinite; }
 .motion-chin-tuck .guide-head { animation: guide-chin 2.2s ease-in-out infinite; }
 .motion-seated-twist .guide-upper { transform-origin: 50% 92%; animation: guide-twist 2.8s ease-in-out infinite; }
 .motion-cat-cow .guide-upper { transform-origin: 50% 100%; animation: guide-cat-cow 3s ease-in-out infinite; }
@@ -598,9 +601,11 @@ textarea::placeholder { color: var(--ink-3); }
 .motion-glute-squeeze .guide-hip-left,
 .motion-glute-squeeze .guide-hip-right { animation: guide-glute 2s ease-in-out infinite; }
 .motion-figure-four .guide-leg-right { transform-origin: 50% 0%; animation: guide-figure-four 2.8s ease-in-out infinite; }
+.motion-hip-circles .guide-lower { transform-origin: 50% 18%; animation: guide-hip-circle 2.8s ease-in-out infinite; }
 .motion-squat .guide-body { animation: guide-squat 2.8s ease-in-out infinite; }
 .motion-squat .guide-leg-left { transform-origin: 50% 0%; animation: guide-squat-left 2.8s ease-in-out infinite; }
 .motion-squat .guide-leg-right { transform-origin: 50% 0%; animation: guide-squat-right 2.8s ease-in-out infinite; }
+.motion-calf-raise .guide-body { animation: guide-calf-raise 2.2s ease-in-out infinite; }
 .motion-hip-hinge .guide-upper { transform-origin: 50% 100%; animation: guide-hinge 2.8s ease-in-out infinite; }
 
 @keyframes guide-neck-tilt { 0%, 15% { transform: rotate(0); } 45%, 75% { transform: rotate(18deg); } 100% { transform: rotate(0); } }
@@ -611,6 +616,8 @@ textarea::placeholder { color: var(--ink-3); }
 @keyframes guide-open-left { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(25deg) translateX(-7px); } }
 @keyframes guide-open-right { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(-25deg) translateX(7px); } }
 @keyframes guide-chest { 0%, 100% { transform: scaleX(1); } 50% { transform: scaleX(1.18); } }
+@keyframes guide-y-left { 0%, 100% { transform: rotate(0); } 50%, 72% { transform: rotate(145deg) translate(-7px, -5px); } }
+@keyframes guide-y-right { 0%, 100% { transform: rotate(0); } 50%, 72% { transform: rotate(-145deg) translate(7px, -5px); } }
 @keyframes guide-chin { 0%, 100% { transform: translateX(7px); } 50% { transform: translateX(-7px); } }
 @keyframes guide-twist { 0%, 100% { transform: skewX(0) scaleX(1); } 50% { transform: skewX(-11deg) scaleX(.82); } }
 @keyframes guide-cat-cow { 0%, 100% { transform: skewX(0) scaleY(1); } 50% { transform: skewX(8deg) scaleY(.88) translateY(9px); } }
@@ -626,9 +633,11 @@ textarea::placeholder { color: var(--ink-3); }
 @keyframes guide-breathe { 0%, 100% { transform: scale(.82); opacity: .15; } 50% { transform: scale(1.28); opacity: .42; } }
 @keyframes guide-glute { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.65); } }
 @keyframes guide-figure-four { 0%, 100% { transform: rotate(0); } 50%, 75% { transform: rotate(73deg) translate(20px, -12px); } }
+@keyframes guide-hip-circle { 0%, 100% { transform: translate(0, 0); } 25% { transform: translate(10px, -3px); } 50% { transform: translate(0, 7px); } 75% { transform: translate(-10px, -3px); } }
 @keyframes guide-squat { 0%, 100% { transform: translateY(-4px); } 50% { transform: translateY(28px); } }
 @keyframes guide-squat-left { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(22deg); } }
 @keyframes guide-squat-right { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(-22deg); } }
+@keyframes guide-calf-raise { 0%, 20%, 100% { transform: translateY(0); } 50%, 72% { transform: translateY(-16px); } }
 @keyframes guide-hinge { 0%, 100% { transform: rotate(0); } 50%, 72% { transform: rotate(38deg); } }
 
 .camera-toolbar {
@@ -697,6 +706,10 @@ textarea::placeholder { color: var(--ink-3); }
   gap: 24px; align-items: center;
   background: linear-gradient(135deg, var(--surface), var(--accent-soft));
 }
+.library-section { gap: 18px; padding-top: 12px; }
+.library-section-head {
+  display: flex; justify-content: space-between; align-items: flex-end; gap: 24px;
+}
 .library-boundary {
   display: grid; gap: 7px; padding: 18px; border-radius: var(--radius-sm);
   background: var(--surface); border: 1px solid var(--line);
@@ -704,9 +717,11 @@ textarea::placeholder { color: var(--ink-3); }
 .link-btn { display: inline-flex; text-decoration: none; width: fit-content; }
 .library-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .library-topic { box-shadow: none; }
+.library-topic-actions { margin-top: auto; padding-top: 4px; }
+.library-topic-actions .btn { font-size: 0.78rem; padding: 8px 12px; }
 .library-topic details { border-top: 1px solid var(--line); padding-top: 10px; }
 .library-topic summary { cursor: pointer; font-size: 0.84rem; font-weight: 570; }
-.library-topic ul { margin: 10px 0; padding-left: 18px; color: var(--ink-2); font-size: 0.82rem; }
+.library-topic details p { margin-top: 9px; }
 .library-icon {
   width: 34px; height: 34px; border-radius: 10px; flex: none;
   display: grid; place-items: center; background: var(--accent-soft); color: var(--accent-ink);
@@ -714,6 +729,40 @@ textarea::placeholder { color: var(--ink-3); }
 .topic-sources { display: grid; gap: 4px; margin-top: auto; }
 .topic-sources a { font-size: 0.74rem; color: var(--accent-ink); text-decoration: none; }
 .topic-sources a:hover { text-decoration: underline; }
+.library-search {
+  display: grid; gap: 5px; min-width: min(320px, 100%);
+  color: var(--ink-2);
+}
+.library-search input { min-width: 0; }
+.library-filters { display: flex; flex-wrap: wrap; gap: 8px; }
+.library-filters .chip { padding: 7px 13px; font-size: 0.82rem; }
+.exercise-library-grid {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px; align-items: stretch;
+}
+.exercise-guide-card { box-shadow: none; min-width: 0; }
+.exercise-guide-head { display: flex; align-items: flex-start; gap: 12px; }
+.exercise-guide-head > div { min-width: 0; }
+.exercise-guide-head .row { gap: 5px; margin-top: 7px; }
+.exercise-guide-head .pill { font-size: 0.67rem; padding: 2px 7px; }
+.exercise-targets {
+  color: var(--accent-ink); font-size: 0.74rem; text-transform: capitalize;
+}
+.exercise-instruction {
+  display: grid; grid-template-columns: 58px minmax(0, 1fr);
+  gap: 9px; padding-top: 9px; border-top: 1px solid var(--line);
+}
+.exercise-instruction span {
+  color: var(--ink-3); font-size: 0.68rem; font-weight: 650;
+  text-transform: uppercase; letter-spacing: 0.05em;
+}
+.exercise-instruction p { color: var(--ink-2); font-size: 0.79rem; line-height: 1.45; }
+.library-governance summary {
+  cursor: pointer; display: flex; justify-content: space-between; gap: 20px;
+}
+.library-governance summary span { display: grid; }
+.library-governance summary small { color: var(--ink-3); font-weight: 400; }
+.library-governance[open] summary { margin-bottom: 18px; }
 .privacy-architecture {
   display: grid; grid-template-columns: minmax(0, 0.7fr) minmax(0, 1.3fr);
   gap: 24px; align-items: start;
@@ -725,6 +774,12 @@ textarea::placeholder { color: var(--ink-3); }
 @media (max-width: 820px) {
   .library-hero, .privacy-architecture { grid-template-columns: 1fr; }
   .library-grid, .retention-grid { grid-template-columns: 1fr; }
+  .exercise-library-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .library-section-head { align-items: stretch; flex-direction: column; }
+  .library-search { width: 100%; }
+}
+@media (max-width: 560px) {
+  .exercise-library-grid { grid-template-columns: 1fr; }
 }
 
 .cam-wrap {

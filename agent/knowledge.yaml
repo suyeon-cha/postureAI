@@ -86,4 +86,3 @@ privacy:
     raw_frames: "Memory only; discarded immediately after local inference"
     landmarks: "Session only"
     personal_history: "Until the user deletes it in this prototype; automated retention is a production requirement"
-    employer_reporting: "Aggregate, opted-in cohorts of 10 or more"

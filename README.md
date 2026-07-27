@@ -5,9 +5,10 @@ on the Dell Pro Max with GB10. An employee says what feels uncomfortable, how mu
 have, and whether they can stand. FlowReset selects an approved 1–10 minute reset, guides the
 movement—with the camera only after explicit consent—and remembers what helped.
 
-For employers, FlowReset provides an opt-in, aggregate workspace view of adoption and
-self-reported outcomes. Employers cannot access individual discomfort answers, camera data,
-audio, movement landmarks, or personal histories.
+FlowReset can be licensed by an employer as a wellness benefit, but the product experience is
+for the individual employee. There is no Workspace or team-performance section in the employee
+app. Employers cannot access discomfort answers, camera data, audio, movement landmarks, or
+personal histories.
 
 No video, prompts, audio, or history are sent to an external AI provider. There is no cloud
 inference fallback.
@@ -35,18 +36,18 @@ standalone consumer-health-data notice, and a wellness/safety disclaimer.
 See [`PRIVACY_AND_SAFETY.md`](PRIVACY_AND_SAFETY.md). These controls describe
 the prototype honestly; they are not a claim of HIPAA certification.
 
-## Employee experience and employer boundary
+## Employee experience
 
 | Employee capability | Trigger | Camera | Default |
 |---|---|---|---|
 | **Reset** (the golden path) | You ask for one | Off until you opt in, per session | ✅ on |
 | **My insights** | You review your own routine, outcomes, and current focus | Not used | Private to the employee |
+| **Learn** | You browse desk-work education and all approved exercise guides | Not used | Shared, source-grounded content |
 | **Watch** | Accumulated sitting / neck / crossed-leg time crosses a threshold, then it *offers* | Off unless you enable watch mode | ❌ off |
 
 Watch mode never starts a session, stops asking when you decline, and clears its accumulator
-when switched off. Reset and My insights are the two employee destinations used in the live
-demo. Aggregate employer reporting is a separate admin capability, never part of the employee
-navigation, and suppresses cohorts with fewer than 10 opted-in employees.
+when switched off. Reset, My insights, and Learn are the three primary employee destinations.
+Settings remains a utility destination for coaching, camera, privacy, data, and help controls.
 
 ## End-to-end employee workflow
 
@@ -61,7 +62,7 @@ navigation, and suppresses cohorts with fewer than 10 opted-in employees.
    repetition phase, and selected form faults. The agent returns one authored cue at a time.
 6. **Reflect:** the employee selects Better, Same, or Worse.
 7. **Remember:** FlowReset stores the minimum session summary locally and updates the employee
-   dashboard. Only eligible opt-in aggregates can contribute to the workspace view.
+   dashboard.
 
 ## Architecture
 
@@ -164,20 +165,13 @@ approval process, broader-body testing, and confidence-threshold evaluation.
 - Memory stores symptom, routine, duration, and a Better/Same/Worse answer. No landmarks, no
   video, no audio, no scores.
 - Settings has a real export, complete local deletion, and future-consent withdrawal.
-- Employer aggregation is off by default and requires separate opt-in.
 
-### Employer reporting (separate admin surface)
+### B2B distribution without an employee Workspace view
 
-`memory.workspace_summary()` aggregates in SQL and suppresses any cohort under
-`K_ANONYMITY = 10`. It takes no `user_id` parameter, so there is no per-person query to call.
-Teams below the floor are suppressed entirely rather than rounded. Sharing is opt-in per user
-and off by default.
-
-The B2B product model is an employer wellness license with employee-controlled participation.
-The employer report focuses on program adoption and aggregate outcomes. It is intentionally
-absent from the employee application, is not an employee-performance dashboard, and does not
-expose individual posture, attendance, pain, camera, or productivity data. Employees see only
-their own **My insights** view.
+The commercial model is an employer wellness license with employee-controlled participation.
+The current product proves the private employee workflow: Reset, My insights, and Learn.
+Procurement, deployment, billing, and any future program-level administration belong in a
+separate system and are not part of this employee desktop app.
 
 ## Hackathon rules and current compliance
 

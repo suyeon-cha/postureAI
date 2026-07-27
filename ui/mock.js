@@ -14,11 +14,16 @@ const MOVES = {
   shoulder_rolls: { name: "Shoulder rolls", seconds: 40, targets: ["shoulders"], cues: { setup: "Arms heavy. Roll your shoulders up, back, and down.", during: "Make the circle bigger — all the way back." } },
   trap_stretch: { name: "Upper trap stretch", seconds: 50, targets: ["neck"], cues: { setup: "Reach your right hand under the chair seat. Tilt your head left.", during: "Long, slow exhale. No pulling — just weight." } },
   chest_opener: { name: "Chest opener", seconds: 35, targets: ["shoulders"], cues: { setup: "Clasp your hands behind your back, or grip the sides of the chair.", during: "Lift your chest and widen across the collarbones." } },
+  y_raise: { name: "Wall Y-raise", seconds: 45, targets: ["shoulders", "back"], seated_ok: true, intensity: "moderate", cues: { setup: "Arms up in a Y. Thumbs back, elbows soft.", during: "Feel your shoulder blades slide down and together." } },
   chin_tuck: { name: "Chin tuck", seconds: 40, targets: ["neck"], cues: { setup: "Look straight ahead. Draw your chin back.", during: "Small movement — the back of your neck should feel long." } },
   seated_twist: { name: "Seated spinal twist", seconds: 50, targets: ["back"], cues: { setup: "Feet flat. Turn your chest to the right, hand on the chair back.", during: "Grow taller as you exhale, then turn a little further." } },
   cat_cow: { name: "Seated cat-cow", seconds: 50, targets: ["back"], cues: { setup: "Hands on your knees. Arch your back, then round it.", during: "Move with your breath." } },
+  thoracic_extension: { name: "Chair-back extension", seconds: 35, targets: ["back", "shoulders"], seated_ok: true, intensity: "gentle", cues: { setup: "Sit back so the chair edge meets your mid-back. Hands behind your head.", during: "Open across the chest and breathe into the stretch." } },
   hip_flexor_reset: { name: "Standing hip flexor reset", seconds: 60, targets: ["hips"], cues: { setup: "Step your right foot back into a short lunge.", during: "Tuck your tailbone under." } },
   standing_forward_fold: { name: "Standing forward fold", seconds: 35, targets: ["back"], cues: { setup: "Feet hip width. Soft knees. Hinge and let your head hang.", during: "Let your neck go completely." } },
+  hip_circles: { name: "Standing hip circles", seconds: 40, targets: ["hips", "sitting"], seated_ok: false, intensity: "gentle", cues: { setup: "Hands on your hips. Draw slow circles with your pelvis.", during: "Widen the circle. Five each direction." } },
+  squat: { name: "Bodyweight squat", seconds: 55, targets: ["sitting", "hips"], seated_ok: false, intensity: "moderate", cues: { setup: "Step back until I can see your ankles.", during: "Slow on the way down — four seconds." } },
+  calf_raise: { name: "Calf raise", seconds: 40, targets: ["sitting", "hips", "legs"], seated_ok: false, intensity: "gentle", cues: { setup: "Stand tall with a chair nearby. Feet hip width.", during: "Rise onto the balls of your feet, pause, and lower slowly." } },
   wrist_stretch: { name: "Wrist extensor stretch", seconds: 45, targets: ["wrists"], cues: { setup: "Arm straight out, palm down. Draw the fingers back.", during: "Ease off if it's sharp." } },
   wrist_prayer: { name: "Prayer stretch", seconds: 30, targets: ["wrists"], cues: { setup: "Palms together at your chest, lower your hands.", during: "Stop where you feel it. Breathe." } },
   finger_fan: { name: "Finger fan and fist", seconds: 25, targets: ["wrists"], cues: { setup: "Spread your fingers wide, then make a loose fist.", during: "Keep the fist loose." } },
@@ -90,7 +95,6 @@ const KNOWLEDGE = {
       raw_frames: "Memory only; discarded immediately after local inference",
       landmarks: "Session only",
       personal_history: "Until the user deletes it in this prototype; automated retention is a production requirement",
-      employer_reporting: "Aggregate, opted-in cohorts of 10 or more",
     },
   },
 };
@@ -141,8 +145,6 @@ export class MockBackend {
       coach_style: "supportive",
       voice: true,
       watch_mode: false,
-      team: "Engineering",
-      workspace_opt_in: false,
     };
     this.plan = null;
     this.session = null;
@@ -445,40 +447,6 @@ export class MockBackend {
       summary: this._summary(),
       daily,
       recent: [...this.sessions].reverse().slice(0, 8),
-      symptom_labels: LABELS,
-    };
-  }
-
-  workspace() {
-    const r = rng(21);
-    const teams = ["Engineering", "Design", "Data", "Support"].map((team) => {
-      const participants = 4 + Math.floor(r() * 8);
-      const sessions = participants * (6 + Math.floor(r() * 10));
-      return {
-        team,
-        participants,
-        sessions,
-        completion_rate: +(0.72 + r() * 0.2).toFixed(2),
-        per_person_per_week: +(1.4 + r() * 2.2).toFixed(1),
-      };
-    });
-    const reported = teams.filter((t) => t.participants >= 10);
-    const participants = reported.reduce((a, t) => a + t.participants, 0);
-    const sessions = reported.reduce((a, t) => a + t.sessions, 0);
-    const completed = Math.round(sessions * 0.79);
-    return {
-      workspace: {
-        suppressed: false,
-        days: 30,
-        k_anonymity: 10,
-        participants,
-        sessions_started: sessions,
-        sessions_completed: completed,
-        completion_rate: +(completed / sessions).toFixed(2),
-        teams: reported,
-        suppressed_teams: teams.length - reported.length,
-        per_person_per_week: +(sessions / participants / 4).toFixed(1),
-      },
       symptom_labels: LABELS,
     };
   }
